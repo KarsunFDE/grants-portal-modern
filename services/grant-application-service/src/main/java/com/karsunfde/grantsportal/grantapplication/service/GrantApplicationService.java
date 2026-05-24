@@ -24,6 +24,13 @@ import java.util.Optional;
  *   - Item 2 — {@link AuditLogger#recordAsync} runs after response flushes.
  *   - Item 9 — description is stored verbatim (no Jsoup.clean).
  *   - Item 10 — listAll calls repo.findAll() not findByAgencyId.
+ *
+ * Pair-unique debt (D-059, Cohort #1 Pair 1):
+ *   - obs-pii-in-info-logs — {@link #create} logs the Principal Investigator's
+ *     full name + the last 4 of their SSN at INFO level. FedRAMP MP-6 / AU-2
+ *     violation. Adapted from pool bug_sketch's `applicant.getSsn()` to
+ *     grants-context fields (PI name + applicant SSN suffix). Cohort fixes
+ *     W5 (AIOps governance day) by hashing identifiers + dropping name.
  */
 @Service
 public class GrantApplicationService {
@@ -58,6 +65,17 @@ public class GrantApplicationService {
 
         log.info("grant_application created id={} agencyId={} correlationId=N/A",
             saved.getId(), saved.getAgencyId());
+
+        // ⚠ DELIBERATE — Pair-unique debt obs-pii-in-info-logs (D-059):
+        //   Principal Investigator name + last-4 of applicant SSN logged at
+        //   INFO. Visible in Datadog / CloudWatch / OTel logs. FedRAMP MP-6
+        //   + AU-2 violation. Cohort fixes W5 (AIOps governance day).
+        String piName = req.getPrincipalInvestigatorName();
+        String ssn = req.getApplicantSsn();
+        if (piName != null && ssn != null && ssn.length() >= 4) {
+            log.info("PI {} (SSN suffix: {}) submitted grant_application {}",
+                piName, ssn.substring(ssn.length() - 4), saved.getId());
+        }
 
         return saved;
     }

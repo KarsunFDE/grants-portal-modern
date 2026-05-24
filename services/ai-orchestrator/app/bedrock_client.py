@@ -18,6 +18,14 @@ remain deferred to W5 — this file is InvokeModel only.
   - Item 7 — pinecone-client still in requirements.txt; no `import pinecone`
     in this module.
 
+⚠ Pair-unique debt (D-059, Cohort #1 Pair 1):
+  - ai-bedrock-streaming-unhandled — `invoke_model` below is a blocking
+    InvokeModel call; long generations (multi-section grant_application
+    drafts can run 5-20s) make the UI hang waiting for the full payload.
+    There is no `stream_invoke` / `invoke_model_with_response_stream`
+    surface here. Cohort fixes W3 (agentic UX day) by adding a streaming
+    function + a /draft-grant-application/stream endpoint upstream.
+
 Stub fallback: if boto3 cannot resolve credentials (typical pre-W5 dev
 laptop), invoke_model returns a stub response shaped like the real one so
 the rest of the stack still flows. Real Bedrock InvokeModel runs whenever

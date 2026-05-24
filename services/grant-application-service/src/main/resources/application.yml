@@ -9,6 +9,19 @@ spring:
       uri: ${MONGO_URL:mongodb://app:app_dev_password@localhost:27017}
       database: ${MONGO_DB:grants_portal_modern}
       auto-index-creation: true
+  # ⚠ DELIBERATE — Pair-unique debt rel-db-pool-size-one (D-059, Cohort #1
+  # Pair 1, grants-portal-modern). HikariCP pool capped at 1 connection;
+  # every concurrent request serializes through this connection. Surfaces
+  # under W5 AIOps load testing — 10 parallel reads should complete in
+  # <3s on a healthy pool; with maximum-pool-size=1 they queue end-to-end.
+  # Cohort fixes W5 by raising to 20 + setting minimum-idle. The pool is
+  # logically Mongo + relational (Hikari is configured here for future
+  # JDBC use; the bug primarily lives as a config-shape issue + intent
+  # signal — the W5 fix lands here regardless of whether JDBC is active).
+  datasource:
+    hikari:
+      maximum-pool-size: 1
+      connection-timeout: 30000
   security:
     oauth2:
       resourceserver:
