@@ -23,7 +23,7 @@ import { FIXTURE_QNA, FIXTURE_SOLICITATIONS } from '../../services/mock-fixtures
         <h2>Q&amp;A triage — {{ grantApplicationTitle() }}</h2>
         <div class="subtitle">CS triages · AI-drafts answer · CO approves · published to all registered vendors</div>
       </div>
-      <a [routerLink-grant-applications', grantApplicationId, 'edit']"><button class="secondary">← Back to grantApplication</button></a>
+      <a [routerLink]="['/grant-applications', grantApplicationId, 'edit']"><button class="secondary">← Back to grant application</button></a>
     </div>
 
     <div class="hitl-banner">

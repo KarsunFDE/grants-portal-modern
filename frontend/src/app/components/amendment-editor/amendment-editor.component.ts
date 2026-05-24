@@ -24,7 +24,7 @@ import { Amendment } from '../../models/amendment';
         <h2>Amendments — {{ grantApplicationTitle() }}</h2>
         <div class="subtitle">FAR 15.206 · CO-only issuance · vendor acknowledgement required</div>
       </div>
-      <a [routerLink-grant-applications', grantApplicationId, 'edit']"><button class="secondary">← Back to grantApplication</button></a>
+      <a [routerLink]="['/grant-applications', grantApplicationId, 'edit']"><button class="secondary">← Back to grant application</button></a>
     </div>
 
     <div class="card" *ngIf="role.currentRole !== 'contracting_officer'">

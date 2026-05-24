@@ -27,9 +27,9 @@ import { FIXTURE_SOLICITATIONS } from '../../services/mock-fixtures';
         </div>
       </div>
       <div>
-        <a [routerLink-grant-applications', id, 'amendments']"><button class="secondary">Amendments</button></a>
-        <a [routerLink-grant-applications', id, 'qa']"><button class="secondary">Q&amp;A triage</button></a>
-        <a [routerLink-grant-applications', id, 'proposals']"><button class="secondary">Proposals</button></a>
+        <a [routerLink]="['/grant-applications', id, 'amendments']"><button class="secondary">Amendments</button></a>
+        <a [routerLink]="['/grant-applications', id, 'qa']"><button class="secondary">Q&amp;A triage</button></a>
+        <a [routerLink]="['/grant-applications', id, 'proposals']"><button class="secondary">Proposals</button></a>
       </div>
     </div>
 

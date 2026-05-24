@@ -23,7 +23,7 @@ import { Proposal } from '../../models/proposal';
         <h2>Proposal intake — {{ grantApplicationTitle() }}</h2>
         <div class="subtitle">Sealed until deadline · DLA DIBBS-style sealed-bid lockbox</div>
       </div>
-      <a [routerLink-grant-applications', grantApplicationId, 'edit']"><button class="secondary">← Back to grantApplication</button></a>
+      <a [routerLink]="['/grant-applications', grantApplicationId, 'edit']"><button class="secondary">← Back to grant application</button></a>
     </div>
 
     <div class="kpi-grid">

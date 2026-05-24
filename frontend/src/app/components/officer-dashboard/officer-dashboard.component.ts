@@ -25,7 +25,7 @@ import { NotificationService } from '../../services/notification.service';
         <div class="subtitle">{{ role.current.displayName }} · {{ role.current.authorityNote }}</div>
       </div>
       <div>
-        <a routerLink-grant-applications/new"><button>+ New grantApplication</button></a>
+        <a routerLink="/grant-applications/new"><button>+ New grant application</button></a>
       </div>
     </div>
 
@@ -60,7 +60,7 @@ import { NotificationService } from '../../services/notification.service';
           <tbody>
             <tr *ngFor="let s of pipeline()">
               <td>
-                <a [routerLink-grant-applications', s.id, 'edit']">{{ s.title }}</a>
+                <a [routerLink]="['/grant-applications', s.id, 'edit']">{{ s.title }}</a>
                 <div style="font-size:0.75rem;color:var(--color-fg-muted)">{{ s.noticeType }} · NAICS {{ s.naics }}</div>
               </td>
               <td><span class="badge" [ngClass]="(s.status || '').toLowerCase()">{{ s.status }}</span></td>
@@ -84,14 +84,14 @@ import { NotificationService } from '../../services/notification.service';
     <div class="card" style="margin-top:1rem">
       <h3>Quick links</h3>
       <p>
-        <a routerLink-grant-applications</a> ·
+        <a routerLink="/grant-applications">All grant applications</a> ·
         <a routerLink="/reports">All reports</a> ·
         <a routerLink="/vendors">Vendor directory</a> ·
         <a routerLink="/admin/audit">Audit log search</a>
       </p>
       <p style="font-size:0.8rem;color:var(--color-fg-muted)">
         ⚠ Legacy grant-application-list (Debt Item 8) is still wired at
-        <a routerLink-grant-applications</a> — preserved
+        <a routerLink="/grant-applications">/grant-applications</a> — preserved
         as the W4 Tue API-modernization teaching artifact.
       </p>
     </div>
