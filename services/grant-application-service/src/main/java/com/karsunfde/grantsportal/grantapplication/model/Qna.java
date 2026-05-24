@@ -6,9 +6,9 @@ import org.springframework.data.mongodb.core.mapping.Document;
 import java.time.Instant;
 
 /**
- * Vendor-submitted question + agency-published answer for a grant_application.
+ * Vendor-submitted question + agency-published answer for a grantApplication.
  *
- * Q&A is part of FAR 15.201 pre-grant_application exchanges. Vendor identity is
+ * Q&A is part of FAR 15.201 pre-grantApplication exchanges. Vendor identity is
  * redacted on publish (other vendors see the Q + A but not the asker).
  *
  * ⚠ Item 9 — {@code question} + {@code answer} are raw text fed into
@@ -20,7 +20,7 @@ public class Qna {
     @Id
     private String id;
 
-    private String grant_applicationId;
+    private String grantApplicationId;
     private String agencyId;
 
     /** ⚠ Item 9 — raw HTML accepted. */
@@ -38,8 +38,8 @@ public class Qna {
 
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
-    public String getGrantApplicationId() { return grant_applicationId; }
-    public void setGrantApplicationId(String grant_applicationId) { this.grant_applicationId = grant_applicationId; }
+    public String getGrantApplicationId() { return grantApplicationId; }
+    public void setGrantApplicationId(String grantApplicationId) { this.grantApplicationId = grantApplicationId; }
     public String getAgencyId() { return agencyId; }
     public void setAgencyId(String agencyId) { this.agencyId = agencyId; }
     public String getQuestion() { return question; }

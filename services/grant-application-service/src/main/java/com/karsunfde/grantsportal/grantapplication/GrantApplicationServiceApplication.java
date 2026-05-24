@@ -6,7 +6,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 /**
  * acquire-gov — GrantApplication Service.
  *
- * FAR/DFARS grant_application lifecycle. CRUD over MongoDB; audit-log writes to
+ * FAR/DFARS grantApplication lifecycle. CRUD over MongoDB; audit-log writes to
  * an audit collection (deliberately written *after* response — see Item 2).
  *
  * DELIBERATE BROWNFIELD DEBT in this service:

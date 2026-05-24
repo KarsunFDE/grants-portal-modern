@@ -2,11 +2,11 @@ import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
-import { GrantApplicationService } from '../../services/grant_application.service';
-import { GrantApplicationCreate } from '../../models/grant_application';
+import { GrantApplicationService } from '../../services/grant-application.service';
+import { GrantApplicationCreate } from '../../models/grant-application';
 
 /**
- * New-grant_application form.
+ * New-grantApplication form.
  *
  * ⚠ DELIBERATE — Item 8 reinforcement / Item 9 reinforcement:
  *   - The `description` textarea has NO maxlength, NO required validator,
@@ -20,7 +20,7 @@ import { GrantApplicationCreate } from '../../models/grant_application';
   standalone: true,
   imports: [CommonModule, FormsModule],
   template: `
-    <h2>New grant_application</h2>
+    <h2>New grantApplication</h2>
     <form (ngSubmit)="onSubmit()" #form="ngForm">
       <p>
         <label>Title<br>

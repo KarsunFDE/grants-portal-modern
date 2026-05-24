@@ -22,7 +22,7 @@ import java.util.Optional;
  *   - Item 2 — amendment publication writes are audit-logged via recordAsync.
  *   - Item 9 — changeSummary stored verbatim.
  *   - Item 10 — list endpoints call findByGrantApplicationId without re-checking
- *     the caller's agency claim against the grant_application's agency.
+ *     the caller's agency claim against the grantApplication's agency.
  */
 @Service
 public class AmendmentService {
@@ -42,16 +42,16 @@ public class AmendmentService {
         this.auditLogger = auditLogger;
     }
 
-    public Optional<Amendment> issue(String grant_applicationId, AmendmentRequest req, String actor) {
-        Optional<GrantApplication> solOpt = solRepo.findById(grant_applicationId);
+    public Optional<Amendment> issue(String grantApplicationId, AmendmentRequest req, String actor) {
+        Optional<GrantApplication> solOpt = solRepo.findById(grantApplicationId);
         if (solOpt.isEmpty()) return Optional.empty();
         GrantApplication sol = solOpt.get();
 
-        List<Amendment> existing = repo.findByGrantApplicationIdOrderByNumberAsc(grant_applicationId);
+        List<Amendment> existing = repo.findByGrantApplicationIdOrderByNumberAsc(grantApplicationId);
         int nextNumber = existing.isEmpty() ? 1 : existing.get(existing.size() - 1).getNumber() + 1;
 
         Amendment a = new Amendment();
-        a.setGrantApplicationId(grant_applicationId);
+        a.setGrantApplicationId(grantApplicationId);
         a.setAgencyId(sol.getAgencyId());
         a.setNumber(nextNumber);
         // ⚠ Item 9 — raw HTML stored.
@@ -64,14 +64,14 @@ public class AmendmentService {
         // ⚠ Item 2 — fire-and-forget.
         auditLogger.recordAsync("AMEND", "amendment", saved.getId(), actor, sol.getAgencyId());
 
-        log.info("amendment issued grant_applicationId={} number={} agencyId={}",
-            grant_applicationId, nextNumber, sol.getAgencyId());
+        log.info("amendment issued grantApplicationId={} number={} agencyId={}",
+            grantApplicationId, nextNumber, sol.getAgencyId());
 
         return Optional.of(saved);
     }
 
-    public List<Amendment> listForGrantApplication(String grant_applicationId) {
+    public List<Amendment> listForGrantApplication(String grantApplicationId) {
         // ⚠ Item 10 — does not re-check caller's agency claim.
-        return repo.findByGrantApplicationIdOrderByNumberAsc(grant_applicationId);
+        return repo.findByGrantApplicationIdOrderByNumberAsc(grantApplicationId);
     }
 }

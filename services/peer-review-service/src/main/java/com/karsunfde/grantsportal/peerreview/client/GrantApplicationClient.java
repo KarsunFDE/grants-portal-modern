@@ -33,8 +33,8 @@ public class GrantApplicationClient {
 
     private final RestTemplate restTemplate;
 
-    @Value("${grant_application.service.url:http://grant-application-service:8081}")
-    private String grant_applicationServiceUrl;
+    @Value("${grantApplication.service.url:http://grant-application-service:8081}")
+    private String grantApplicationServiceUrl;
 
     @Autowired
     public GrantApplicationClient(RestTemplate restTemplate) {
@@ -42,14 +42,14 @@ public class GrantApplicationClient {
     }
 
     /**
-     * Fetch a grant_application by id from the upstream service.
+     * Fetch a grantApplication by id from the upstream service.
      *
      * ⚠ No try/catch — a 5xx from upstream propagates as a 500 from us.
      * ⚠ No timeout — a 30-second hang upstream is a 30-second hang here.
      */
     @SuppressWarnings("unchecked")
     public Map<String, Object> getGrantApplication(String id) {
-        String url = grant_applicationServiceUrl + "/api/grant-applications/" + id;
+        String url = grantApplicationServiceUrl + "/api/grant-applications/" + id;
         // Item 6 — peer-review-service uses traceId key.
         log.info("calling grant-application-service url={} traceId=N/A", url);
         return restTemplate.getForObject(url, Map.class);

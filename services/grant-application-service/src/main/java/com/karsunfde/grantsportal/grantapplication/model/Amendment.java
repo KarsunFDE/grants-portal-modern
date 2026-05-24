@@ -6,9 +6,9 @@ import org.springframework.data.mongodb.core.mapping.Document;
 import java.time.Instant;
 
 /**
- * Amendment to a published grant_application. FAR 15.206.
+ * Amendment to a published grantApplication. FAR 15.206.
  *
- * Amendments are numbered sequentially per grant_application (0001, 0002, ...).
+ * Amendments are numbered sequentially per grantApplication (0001, 0002, ...).
  * Vendors with proposals-in-progress must acknowledge before deadline.
  *
  * ⚠ Item 9 — {@code changeSummary} is raw HTML, fed into ai-orchestrator
@@ -21,7 +21,7 @@ public class Amendment {
     @Id
     private String id;
 
-    private String grant_applicationId;
+    private String grantApplicationId;
     private String agencyId;
     private int number;
 
@@ -36,8 +36,8 @@ public class Amendment {
 
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
-    public String getGrantApplicationId() { return grant_applicationId; }
-    public void setGrantApplicationId(String grant_applicationId) { this.grant_applicationId = grant_applicationId; }
+    public String getGrantApplicationId() { return grantApplicationId; }
+    public void setGrantApplicationId(String grantApplicationId) { this.grantApplicationId = grantApplicationId; }
     public String getAgencyId() { return agencyId; }
     public void setAgencyId(String agencyId) { this.agencyId = agencyId; }
     public int getNumber() { return number; }

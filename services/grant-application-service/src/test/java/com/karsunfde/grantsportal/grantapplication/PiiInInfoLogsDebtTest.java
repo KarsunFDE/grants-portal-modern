@@ -66,7 +66,7 @@ class PiiInInfoLogsDebtTest {
 
         GrantApplicationCreateRequest req = new GrantApplicationCreateRequest();
         req.setAgencyId("agency-test");
-        req.setTitle("Test grant_application");
+        req.setTitle("Test grantApplication");
         req.setDescription("d");
         req.setStatus("DRAFT");
         req.setPrincipalInvestigatorName("Dr Alice Sentinel-Carver");

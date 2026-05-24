@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../environments/environment';
-import { PeerReview, PeerReviewScore } from '../models/peer_review';
+import { PeerReview, PeerReviewScore } from '../models/peer-review';
 
 @Injectable({ providedIn: 'root' })
 export class PeerReviewService {
@@ -37,7 +37,7 @@ export class PeerReviewService {
   draftSsdd(id: string): Observable<{ narrative: string; correlationId: string }> {
     return this.http.post<{ narrative: string; correlationId: string }>(
       `${environment.apiGatewayUrl}/api/ai/eval/ssdd-draft`,
-      { peer_reviewId: id },
+      { peerReviewId: id },
     );
   }
 }

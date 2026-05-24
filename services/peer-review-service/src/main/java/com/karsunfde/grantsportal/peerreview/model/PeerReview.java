@@ -14,13 +14,13 @@ import java.util.List;
  * ⚠ Item 3 — fetching proposal text for scoring is the canonical reproducer
  * for the no-circuit-breaker debt (evaluator → grant-application-service hot loop).
  */
-@Document(collection = "peer_reviews")
+@Document(collection = "peerReviews")
 public class PeerReview {
 
     @Id
     private String id;
 
-    private String grant_applicationId;
+    private String grantApplicationId;
     private String agencyId;
     private String state;
     private List<String> panelMembers = new ArrayList<>();
@@ -33,8 +33,8 @@ public class PeerReview {
 
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
-    public String getGrantApplicationId() { return grant_applicationId; }
-    public void setGrantApplicationId(String grant_applicationId) { this.grant_applicationId = grant_applicationId; }
+    public String getGrantApplicationId() { return grantApplicationId; }
+    public void setGrantApplicationId(String grantApplicationId) { this.grantApplicationId = grantApplicationId; }
     public String getAgencyId() { return agencyId; }
     public void setAgencyId(String agencyId) { this.agencyId = agencyId; }
     public String getState() { return state; }

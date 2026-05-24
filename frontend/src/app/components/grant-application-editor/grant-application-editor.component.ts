@@ -2,7 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { GrantApplication } from '../../models/grant_application';
+import { GrantApplication } from '../../models/grant-application';
 import { FIXTURE_SOLICITATIONS } from '../../services/mock-fixtures';
 
 /**
@@ -20,10 +20,10 @@ import { FIXTURE_SOLICITATIONS } from '../../services/mock-fixtures';
   template: `
     <div class="page-header">
       <div>
-        <h2>{{ grant_application?.title || 'Draft grant_application' }}</h2>
+        <h2>{{ grantApplication?.title || 'Draft grantApplication' }}</h2>
         <div class="subtitle">
-          <span class="badge" [ngClass]="(grant_application?.status || 'draft').toLowerCase()">{{ grant_application?.status }}</span>
-          · NAICS {{ grant_application?.naics }} · {{ grant_application?.contractType }}
+          <span class="badge" [ngClass]="(grantApplication?.status || 'draft').toLowerCase()">{{ grantApplication?.status }}</span>
+          · NAICS {{ grantApplication?.naics }} · {{ grantApplication?.contractType }}
         </div>
       </div>
       <div>
@@ -86,7 +86,7 @@ import { FIXTURE_SOLICITATIONS } from '../../services/mock-fixtures';
 })
 export class GrantApplicationEditorComponent implements OnInit {
   id = '';
-  grant_application: GrantApplication | null = null;
+  grantApplication: GrantApplication | null = null;
   sectionC = '';
   sectionL = '';
   sectionM = '';
@@ -98,9 +98,9 @@ export class GrantApplicationEditorComponent implements OnInit {
 
   ngOnInit(): void {
     this.id = this.route.snapshot.params['id'];
-    this.grant_application = FIXTURE_SOLICITATIONS.find((s) => s.id === this.id)
+    this.grantApplication = FIXTURE_SOLICITATIONS.find((s) => s.id === this.id)
       ?? FIXTURE_SOLICITATIONS[0];
-    this.sectionC = `C.1 SCOPE. ${this.grant_application.description}`;
+    this.sectionC = `C.1 SCOPE. ${this.grantApplication.description}`;
     this.sectionL = 'L.5.2 Volume I (Technical) — 60 pages…';
     this.sectionM = 'M.3.1 Technical Approach (40%)\nM.3.2 Management Approach (25%)\nM.3.3 Past Performance (20%)\nM.3.4 Price (15%)';
   }

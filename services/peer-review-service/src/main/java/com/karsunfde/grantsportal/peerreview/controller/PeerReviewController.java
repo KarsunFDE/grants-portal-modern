@@ -25,38 +25,38 @@ import java.util.Map;
  * ⚠ DELIBERATE — Item 3 reinforcement:
  *   POST /api/peer-reviews is a state-mutating endpoint that does NOT accept
  *   or honour an Idempotency-Key header. A retry from the client creates
- *   duplicate peer_reviews.
+ *   duplicate peerReviews.
  */
 @RestController
 @RequestMapping("/api/peer-reviews")
 public class PeerReviewController {
 
-    private final GrantApplicationClient grant_applicationClient;
+    private final GrantApplicationClient grantApplicationClient;
     private final PeerReviewService svc;
 
     @Autowired
-    public PeerReviewController(GrantApplicationClient grant_applicationClient, PeerReviewService svc) {
-        this.grant_applicationClient = grant_applicationClient;
+    public PeerReviewController(GrantApplicationClient grantApplicationClient, PeerReviewService svc) {
+        this.grantApplicationClient = grantApplicationClient;
         this.svc = svc;
     }
 
-    /** Fetch the grant_application snapshot the peer_review panel is reviewing. */
-    @GetMapping("/{peer_reviewId}/grant_application/{grant_applicationId}")
+    /** Fetch the grantApplication snapshot the peerReview panel is reviewing. */
+    @GetMapping("/{peerReviewId}/grantApplication/{grantApplicationId}")
     public ResponseEntity<Map<String, Object>> getGrantApplicationForPeerReview(
-            @PathVariable String peer_reviewId,
-            @PathVariable String grant_applicationId) {
+            @PathVariable String peerReviewId,
+            @PathVariable String grantApplicationId) {
         // ⚠ Item 3 — no circuit breaker on this hop.
-        Map<String, Object> sol = grant_applicationClient.getGrantApplication(grant_applicationId);
+        Map<String, Object> sol = grantApplicationClient.getGrantApplication(grantApplicationId);
         return ResponseEntity.ok(sol);
     }
 
-    /** Create a new peer_review panel. ⚠ Item 3 — no idempotency key. */
+    /** Create a new peerReview panel. ⚠ Item 3 — no idempotency key. */
     @PostMapping
     public ResponseEntity<PeerReview> create(@RequestBody Map<String, Object> req,
                                               @RequestHeader(value = "X-User", defaultValue = "anonymous") String actor) {
-        String grant_applicationId = String.valueOf(req.get("grant_applicationId"));
+        String grantApplicationId = String.valueOf(req.get("grantApplicationId"));
         String agencyId = (String) req.getOrDefault("agencyId", "GSA-FAS");
-        return ResponseEntity.ok(svc.create(grant_applicationId, agencyId, actor));
+        return ResponseEntity.ok(svc.create(grantApplicationId, agencyId, actor));
     }
 
     @GetMapping("/{id}")

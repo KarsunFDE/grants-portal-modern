@@ -7,7 +7,7 @@ import java.util.List;
 
 public interface QnaRepository extends MongoRepository<Qna, String> {
 
-    List<Qna> findByGrantApplicationId(String grant_applicationId);
+    List<Qna> findByGrantApplicationId(String grantApplicationId);
 
     /** ⚠ Item 10 — declared but unused. */
     List<Qna> findByAgencyId(String agencyId);

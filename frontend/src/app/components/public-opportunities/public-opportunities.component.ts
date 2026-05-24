@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { FIXTURE_SOLICITATIONS } from '../../services/mock-fixtures';
-import { GrantApplication } from '../../models/grant_application';
+import { GrantApplication } from '../../models/grant-application';
 
 /**
  * Public Opportunity Search (SAM.gov-style).

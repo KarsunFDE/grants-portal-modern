@@ -8,7 +8,7 @@ import { NotificationService } from '../../services/notification.service';
 /**
  * Officer Dashboard — role-aware landing for CO / CS / PM / SSA.
  *
- * Per feature-inventory-target.md: KPI tiles for open grant_applications,
+ * Per feature-inventory-target.md: KPI tiles for open grantApplications,
  * proposals awaiting eval, amendments due, CPARs due in 30 days.
  * Touches Item 8 (hardcoded URL lives in the grant-application-list
  * component referenced below) — keeping the localized teaching
@@ -25,14 +25,14 @@ import { NotificationService } from '../../services/notification.service';
         <div class="subtitle">{{ role.current.displayName }} · {{ role.current.authorityNote }}</div>
       </div>
       <div>
-        <a routerLink-grant-applications/new"><button>+ New grant_application</button></a>
+        <a routerLink-grant-applications/new"><button>+ New grantApplication</button></a>
       </div>
     </div>
 
     <section class="kpi-grid">
       <div class="kpi-tile">
         <div class="kpi-value">{{ openGrantApplications() }}</div>
-        <div class="kpi-label">Open grant_applications</div>
+        <div class="kpi-label">Open grantApplications</div>
       </div>
       <div class="kpi-tile">
         <div class="kpi-value">{{ proposalsAwaitingEval() }}</div>

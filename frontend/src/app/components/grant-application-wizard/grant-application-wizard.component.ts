@@ -2,8 +2,8 @@ import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
-import { GrantApplicationService } from '../../services/grant_application.service';
-import { GrantApplication, GrantApplicationCreate, GrantApplicationSections } from '../../models/grant_application';
+import { GrantApplicationService } from '../../services/grant-application.service';
+import { GrantApplication, GrantApplicationCreate, GrantApplicationSections } from '../../models/grant-application';
 
 /**
  * Multi-step GrantApplication Drafting Wizard.
@@ -26,7 +26,7 @@ import { GrantApplication, GrantApplicationCreate, GrantApplicationSections } fr
   template: `
     <div class="page-header">
       <div>
-        <h2>New grant_application — drafting wizard</h2>
+        <h2>New grantApplication — drafting wizard</h2>
         <div class="subtitle">FAR 15.204 Sections A–M · AI-assisted</div>
       </div>
     </div>
@@ -84,7 +84,7 @@ import { GrantApplication, GrantApplicationCreate, GrantApplicationSections } fr
       </div>
       <label><span class="label-text">Description (public-facing)</span>
         <textarea name="description" rows="4" [(ngModel)]="model.description"
-                  placeholder="Public grant_application description (rendered raw — see Debt Item 9)"></textarea>
+                  placeholder="Public grantApplication description (rendered raw — see Debt Item 9)"></textarea>
       </label>
     </div>
 
@@ -124,7 +124,7 @@ import { GrantApplication, GrantApplicationCreate, GrantApplicationSections } fr
     <!-- Step 5: Review -->
     <div class="card" *ngIf="step === 4">
       <h3>5. Review &amp; submit for internal review</h3>
-      <p>Submitting transitions the grant_application to <code>INTERNAL_REVIEW</code>.
+      <p>Submitting transitions the grantApplication to <code>INTERNAL_REVIEW</code>.
          CO sign-off required before publication.</p>
       <table>
         <tbody>

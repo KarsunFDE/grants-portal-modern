@@ -4,7 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { RoleService } from '../../services/role.service';
 import { FIXTURE_EVALUATION, FIXTURE_PROPOSALS, FIXTURE_SCORES } from '../../services/mock-fixtures';
-import { PeerReviewFactor } from '../../models/peer_review';
+import { PeerReviewFactor } from '../../models/peer-review';
 
 /**
  * Source Selection Tradeoff + SSDD draft (FAR 15.308).
@@ -39,14 +39,14 @@ import { PeerReviewFactor } from '../../models/peer_review';
         <thead>
           <tr>
             <th>Proposal</th>
-            <th *ngFor="let f of peer_review.factors">{{ f.name }} <small>({{ f.weight }}%)</small></th>
+            <th *ngFor="let f of peerReview.factors">{{ f.name }} <small>({{ f.weight }}%)</small></th>
             <th>Weighted total</th>
           </tr>
         </thead>
         <tbody>
           <tr *ngFor="let p of proposals">
             <td><strong>{{ p.vendorName }}</strong></td>
-            <td *ngFor="let f of peer_review.factors">{{ avgScore(p.id, f.id) | number:'1.0-1' }}</td>
+            <td *ngFor="let f of peerReview.factors">{{ avgScore(p.id, f.id) | number:'1.0-1' }}</td>
             <td><strong>{{ weighted(p.id) | number:'1.0-2' }}</strong></td>
           </tr>
         </tbody>
@@ -73,13 +73,13 @@ import { PeerReviewFactor } from '../../models/peer_review';
   `,
 })
 export class ConsensusSsddComponent {
-  peer_review = FIXTURE_EVALUATION;
+  peerReview = FIXTURE_EVALUATION;
   proposals = FIXTURE_PROPOSALS;
   ssddNarrative = '';
   signed = false;
 
   constructor(public role: RoleService, route: ActivatedRoute) {
-    // Route param `solId` reserved for multi-peer_review routing.
+    // Route param `solId` reserved for multi-peerReview routing.
   }
 
   avgScore(proposalId: string, factorId: string): number {
@@ -89,7 +89,7 @@ export class ConsensusSsddComponent {
   }
 
   weighted(proposalId: string): number {
-    return this.peer_review.factors.reduce(
+    return this.peerReview.factors.reduce(
       (sum: number, f: PeerReviewFactor) => sum + this.avgScore(proposalId, f.id) * (f.weight / 100),
       0,
     );
@@ -103,7 +103,7 @@ export class ConsensusSsddComponent {
       `Source Selection Decision Document (SSDD)\n\n` +
       `Pursuant to FAR 15.308, the Source Selection Authority has determined that ` +
       `${best.name} represents the best value to the Government under the ` +
-      `peer_review criteria of Section M. The weighted technical score of ` +
+      `peerReview criteria of Section M. The weighted technical score of ` +
       `${best.score.toFixed(2)} is consistent with the tradeoff analysis between ` +
       `technical capability, past performance, and price.\n\n` +
       `[AI-DRAFTED — SSA must review for factual accuracy. Item 4 (no Pydantic schema), Item 5 (legacy LLMChain).]`;

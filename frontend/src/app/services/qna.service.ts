@@ -8,22 +8,22 @@ import { Qna } from '../models/qna';
 export class QnaService {
   constructor(private http: HttpClient) {}
 
-  list(grant_applicationId: string): Observable<Qna[]> {
+  list(grantApplicationId: string): Observable<Qna[]> {
     return this.http.get<Qna[]>(
-      `${environment.apiGatewayUrl}/api/grant-applications/${grant_applicationId}/qa`,
+      `${environment.apiGatewayUrl}/api/grant-applications/${grantApplicationId}/qa`,
     );
   }
 
-  answer(grant_applicationId: string, qaId: string, answer: string): Observable<Qna> {
+  answer(grantApplicationId: string, qaId: string, answer: string): Observable<Qna> {
     return this.http.put<Qna>(
-      `${environment.apiGatewayUrl}/api/grant-applications/${grant_applicationId}/qa/${qaId}/answer`,
+      `${environment.apiGatewayUrl}/api/grant-applications/${grantApplicationId}/qa/${qaId}/answer`,
       { answer },
     );
   }
 
-  submitQuestion(grant_applicationId: string, question: string): Observable<Qna> {
+  submitQuestion(grantApplicationId: string, question: string): Observable<Qna> {
     return this.http.post<Qna>(
-      `${environment.apiGatewayUrl}/api/grant-applications/${grant_applicationId}/qa`,
+      `${environment.apiGatewayUrl}/api/grant-applications/${grantApplicationId}/qa`,
       { question },
     );
   }

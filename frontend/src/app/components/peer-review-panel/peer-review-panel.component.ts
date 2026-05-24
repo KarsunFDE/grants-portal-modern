@@ -15,7 +15,7 @@ import { environment } from '../../../environments/environment';
         coordination + HITL interrupt nodes.
       </em>
     </p>
-    <button (click)="createPanel()">Create stub peer_review panel</button>
+    <button (click)="createPanel()">Create stub peerReview panel</button>
     <pre *ngIf="result">{{ result | json }}</pre>
     <p *ngIf="error" style="color: crimson">{{ error }}</p>
   `,
@@ -30,7 +30,7 @@ export class PeerReviewPanelComponent {
     this.error = null;
     this.http
       .post(`${environment.apiGatewayUrl}/api/peer-reviews`, {
-        grant_applicationId: 'stub-grant_application-id',
+        grantApplicationId: 'stub-grantApplication-id',
       })
       .subscribe({
         next: (r) => (this.result = r),

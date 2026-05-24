@@ -14,7 +14,7 @@ import java.nio.file.StandardCopyOption;
 import java.util.UUID;
 
 /**
- * AttachmentService — Principal Investigator file upload for grant_application
+ * AttachmentService — Principal Investigator file upload for grantApplication
  * supporting documents (CV, budget justification, biosketch, project narrative).
  *
  * Created as a NEW file by `pair-brownfield-generator` per D-059 Step 4b

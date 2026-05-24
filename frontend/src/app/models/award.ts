@@ -4,8 +4,8 @@
 
 export interface Award {
   id: string;
-  peer_reviewId: string;
-  grant_applicationId: string;
+  peerReviewId: string;
+  grantApplicationId: string;
   winningVendorId: string;
   winningVendorName: string;
   contractNumber: string;

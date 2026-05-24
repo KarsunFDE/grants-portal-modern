@@ -20,10 +20,10 @@ import { FIXTURE_QNA, FIXTURE_SOLICITATIONS } from '../../services/mock-fixtures
   template: `
     <div class="page-header">
       <div>
-        <h2>Q&amp;A triage — {{ grant_applicationTitle() }}</h2>
+        <h2>Q&amp;A triage — {{ grantApplicationTitle() }}</h2>
         <div class="subtitle">CS triages · AI-drafts answer · CO approves · published to all registered vendors</div>
       </div>
-      <a [routerLink-grant-applications', grant_applicationId, 'edit']"><button class="secondary">← Back to grant_application</button></a>
+      <a [routerLink-grant-applications', grantApplicationId, 'edit']"><button class="secondary">← Back to grantApplication</button></a>
     </div>
 
     <div class="hitl-banner">
@@ -66,20 +66,20 @@ import { FIXTURE_QNA, FIXTURE_SOLICITATIONS } from '../../services/mock-fixtures
   `,
 })
 export class QnaTriageComponent implements OnInit {
-  grant_applicationId = '';
+  grantApplicationId = '';
   qna: Qna[] = [];
 
   constructor(private route: ActivatedRoute) {}
 
   ngOnInit(): void {
-    this.grant_applicationId = this.route.snapshot.params['id'];
+    this.grantApplicationId = this.route.snapshot.params['id'];
     this.qna = FIXTURE_QNA
-      .filter((q) => q.grant_applicationId === this.grant_applicationId)
+      .filter((q) => q.grantApplicationId === this.grantApplicationId)
       .map((q) => ({ ...q }));
   }
 
-  grant_applicationTitle(): string {
-    return FIXTURE_SOLICITATIONS.find((s) => s.id === this.grant_applicationId)?.title ?? this.grant_applicationId;
+  grantApplicationTitle(): string {
+    return FIXTURE_SOLICITATIONS.find((s) => s.id === this.grantApplicationId)?.title ?? this.grantApplicationId;
   }
 
   aiDraft(q: Qna): void {

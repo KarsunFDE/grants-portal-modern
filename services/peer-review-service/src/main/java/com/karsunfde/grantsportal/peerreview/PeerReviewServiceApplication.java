@@ -8,8 +8,8 @@ import org.springframework.web.client.RestTemplate;
 /**
  * acquire-gov — PeerReview Service.
  *
- * Coordinates peer_review panels for grant_applications. Calls grant-application-service
- * synchronously to fetch grant_application data (⚠ no circuit breaker — Item 3).
+ * Coordinates peerReview panels for grantApplications. Calls grant-application-service
+ * synchronously to fetch grantApplication data (⚠ no circuit breaker — Item 3).
  *
  * Brownfield-debt items in this service:
  *   - Item 3 — No Resilience4j circuit breaker on outbound calls

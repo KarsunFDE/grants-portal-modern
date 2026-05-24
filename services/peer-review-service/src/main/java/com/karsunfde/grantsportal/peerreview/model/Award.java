@@ -14,8 +14,8 @@ public class Award {
     @Id
     private String id;
 
-    private String peer_reviewId;
-    private String grant_applicationId;
+    private String peerReviewId;
+    private String grantApplicationId;
     private String winningProposalId;
     private String agencyId;
     private String contractNumber;
@@ -29,10 +29,10 @@ public class Award {
 
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
-    public String getPeerReviewId() { return peer_reviewId; }
-    public void setPeerReviewId(String peer_reviewId) { this.peer_reviewId = peer_reviewId; }
-    public String getGrantApplicationId() { return grant_applicationId; }
-    public void setGrantApplicationId(String grant_applicationId) { this.grant_applicationId = grant_applicationId; }
+    public String getPeerReviewId() { return peerReviewId; }
+    public void setPeerReviewId(String peerReviewId) { this.peerReviewId = peerReviewId; }
+    public String getGrantApplicationId() { return grantApplicationId; }
+    public void setGrantApplicationId(String grantApplicationId) { this.grantApplicationId = grantApplicationId; }
     public String getWinningProposalId() { return winningProposalId; }
     public void setWinningProposalId(String winningProposalId) { this.winningProposalId = winningProposalId; }
     public String getAgencyId() { return agencyId; }

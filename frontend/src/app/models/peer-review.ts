@@ -34,7 +34,7 @@ export type PeerReviewState =
 
 export interface PeerReview {
   id: string;
-  grant_applicationId: string;
+  grantApplicationId: string;
   panelMembers: string[];          // evaluator user IDs
   factors: PeerReviewFactor[];
   state: PeerReviewState;

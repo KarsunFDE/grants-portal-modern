@@ -4,13 +4,13 @@ import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { RoleService } from '../../services/role.service';
 import { FIXTURE_EVALUATION, FIXTURE_PROPOSALS, FIXTURE_SCORES } from '../../services/mock-fixtures';
-import { PeerReviewScore } from '../../models/peer_review';
+import { PeerReviewScore } from '../../models/peer-review';
 
 /**
  * Evaluator Workspace (TEP member view).
  *
  * Assigned proposals only (Section M factor-by-factor; narrative
- * required). Mirrors FAR 15.305 peer_review discipline + Item 3
+ * required). Mirrors FAR 15.305 peerReview discipline + Item 3
  * surface (evaluator-agent calling grant-application-service for proposal
  * text is the canonical circuit-breaker reproducer).
  */
@@ -22,9 +22,9 @@ import { PeerReviewScore } from '../../models/peer_review';
     <div class="page-header">
       <div>
         <h2>Evaluator workspace</h2>
-        <div class="subtitle">{{ role.current.displayName }} · Eval {{ peer_review.id }} · FAR 15.305</div>
+        <div class="subtitle">{{ role.current.displayName }} · Eval {{ peerReview.id }} · FAR 15.305</div>
       </div>
-      <a [routerLink]="['/peer_review', peer_review.id, 'consensus']"><button class="secondary">Consensus view →</button></a>
+      <a [routerLink]="['/peer-review', peerReview.id, 'consensus']"><button class="secondary">Consensus view →</button></a>
     </div>
 
     <div class="card">
@@ -37,7 +37,7 @@ import { PeerReviewScore } from '../../models/peer_review';
         <thead>
           <tr>
             <th>Proposal</th>
-            <th *ngFor="let f of peer_review.factors">
+            <th *ngFor="let f of peerReview.factors">
               {{ f.name }}<br><small>{{ f.sectionM }} · {{ f.weight }}%</small>
             </th>
           </tr>
@@ -45,7 +45,7 @@ import { PeerReviewScore } from '../../models/peer_review';
         <tbody>
           <tr *ngFor="let p of proposals">
             <td><strong>{{ p.vendorName }}</strong></td>
-            <td *ngFor="let f of peer_review.factors">
+            <td *ngFor="let f of peerReview.factors">
               <select [(ngModel)]="scoreFor(p.id, f.id).score">
                 <option [ngValue]="9">Exceptional (9-10)</option>
                 <option [ngValue]="7">Very Good (7-8)</option>
@@ -65,7 +65,7 @@ import { PeerReviewScore } from '../../models/peer_review';
   `,
 })
 export class EvaluatorWorkspaceComponent {
-  peer_review = FIXTURE_EVALUATION;
+  peerReview = FIXTURE_EVALUATION;
   proposals = FIXTURE_PROPOSALS;
   scoreCache: Record<string, PeerReviewScore> = {};
 

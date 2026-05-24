@@ -60,10 +60,10 @@ public class GrantApplicationService {
 
         // ⚠ Item 2 — fire-and-forget. Returns immediately, controller flushes
         //   response, audit may or may not land.
-        auditLogger.recordAsync("CREATE", "grant_application", saved.getId(),
+        auditLogger.recordAsync("CREATE", "grantApplication", saved.getId(),
             actor, saved.getAgencyId());
 
-        log.info("grant_application created id={} agencyId={} correlationId=N/A",
+        log.info("grantApplication created id={} agencyId={} correlationId=N/A",
             saved.getId(), saved.getAgencyId());
 
         // ⚠ DELIBERATE — Pair-unique debt obs-pii-in-info-logs (D-059):
@@ -73,7 +73,7 @@ public class GrantApplicationService {
         String piName = req.getPrincipalInvestigatorName();
         String ssn = req.getApplicantSsn();
         if (piName != null && ssn != null && ssn.length() >= 4) {
-            log.info("PI {} (SSN suffix: {}) submitted grant_application {}",
+            log.info("PI {} (SSN suffix: {}) submitted grantApplication {}",
                 piName, ssn.substring(ssn.length() - 4), saved.getId());
         }
 
@@ -85,7 +85,7 @@ public class GrantApplicationService {
     }
 
     /**
-     * ⚠ Item 10 — returns grant_applications across ALL agencies. The
+     * ⚠ Item 10 — returns grantApplications across ALL agencies. The
      * {@code findByAgencyId} method exists on the repository but isn't
      * called from anywhere.
      */
@@ -101,7 +101,7 @@ public class GrantApplicationService {
             if (req.getStatus() != null) s.setStatus(req.getStatus());
             s.setUpdatedAt(Instant.now());
             GrantApplication saved = repo.save(s);
-            auditLogger.recordAsync("UPDATE", "grant_application", saved.getId(),
+            auditLogger.recordAsync("UPDATE", "grantApplication", saved.getId(),
                 actor, saved.getAgencyId());
             return saved;
         });
@@ -110,7 +110,7 @@ public class GrantApplicationService {
     public boolean delete(String id, String actor) {
         return repo.findById(id).map(s -> {
             repo.deleteById(id);
-            auditLogger.recordAsync("DELETE", "grant_application", id, actor, s.getAgencyId());
+            auditLogger.recordAsync("DELETE", "grantApplication", id, actor, s.getAgencyId());
             return true;
         }).orElse(false);
     }
@@ -126,9 +126,9 @@ public class GrantApplicationService {
             s.setUpdatedAt(Instant.now());
             GrantApplication saved = repo.save(s);
             // ⚠ Item 2.
-            auditLogger.recordAsync("PUBLISH", "grant_application", saved.getId(),
+            auditLogger.recordAsync("PUBLISH", "grantApplication", saved.getId(),
                 actor, saved.getAgencyId());
-            log.info("grant_application published id={} agencyId={}",
+            log.info("grantApplication published id={} agencyId={}",
                 saved.getId(), saved.getAgencyId());
             return saved;
         });
@@ -140,7 +140,7 @@ public class GrantApplicationService {
             s.setUpdatedAt(Instant.now());
             GrantApplication saved = repo.save(s);
             // ⚠ Item 2.
-            auditLogger.recordAsync("CANCEL", "grant_application", saved.getId(),
+            auditLogger.recordAsync("CANCEL", "grantApplication", saved.getId(),
                 actor, saved.getAgencyId());
             return saved;
         });

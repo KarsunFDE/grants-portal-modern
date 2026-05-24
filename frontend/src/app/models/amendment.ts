@@ -1,13 +1,13 @@
 /**
- * Amendment to a published grant_application (FAR 15.206).
+ * Amendment to a published grantApplication (FAR 15.206).
  *
- * Numbered sequentially per grant_application. Issuance is restricted to CO.
+ * Numbered sequentially per grantApplication. Issuance is restricted to CO.
  * Vendors with proposals-in-progress must acknowledge before deadline;
  * acknowledgement state is tracked here.
  */
 export interface Amendment {
   id: string;
-  grant_applicationId: string;
+  grantApplicationId: string;
   number: number;                  // 0001, 0002, ...
   changeSummary: string;
   effectiveAt: string;             // ISO

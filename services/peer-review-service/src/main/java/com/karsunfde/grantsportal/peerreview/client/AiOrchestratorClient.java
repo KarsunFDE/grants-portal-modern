@@ -32,11 +32,11 @@ public class AiOrchestratorClient {
     }
 
     @SuppressWarnings("unchecked")
-    public Map<String, Object> draftSsdd(String peer_reviewId) {
+    public Map<String, Object> draftSsdd(String peerReviewId) {
         Map<String, Object> body = new HashMap<>();
-        body.put("topic", "SSDD for peer_review " + peer_reviewId);
+        body.put("topic", "SSDD for peerReview " + peerReviewId);
         body.put("constraints", "FAR 15.308 tradeoff narrative");
-        log.info("calling ai-orchestrator /eval/ssdd-draft peer_reviewId={} traceId=N/A", peer_reviewId);
+        log.info("calling ai-orchestrator /eval/ssdd-draft peerReviewId={} traceId=N/A", peerReviewId);
         return restTemplate.postForObject(aiUrl + "/eval/ssdd-draft", body, Map.class);
     }
 

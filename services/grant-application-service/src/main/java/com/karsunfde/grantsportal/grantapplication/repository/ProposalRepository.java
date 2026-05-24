@@ -7,7 +7,7 @@ import java.util.List;
 
 public interface ProposalRepository extends MongoRepository<Proposal, String> {
 
-    List<Proposal> findByGrantApplicationId(String grant_applicationId);
+    List<Proposal> findByGrantApplicationId(String grantApplicationId);
 
     /** ⚠ Item 10 — vendors should NOT see other vendors' proposals; this
      *  method is the safe one but isn't always used. */

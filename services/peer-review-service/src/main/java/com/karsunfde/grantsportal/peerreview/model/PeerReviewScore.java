@@ -12,7 +12,7 @@ public class PeerReviewScore {
     @Id
     private String id;
 
-    private String peer_reviewId;
+    private String peerReviewId;
     private String evaluatorId;
     private String proposalId;
     private String factorId;
@@ -24,8 +24,8 @@ public class PeerReviewScore {
 
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
-    public String getPeerReviewId() { return peer_reviewId; }
-    public void setPeerReviewId(String peer_reviewId) { this.peer_reviewId = peer_reviewId; }
+    public String getPeerReviewId() { return peerReviewId; }
+    public void setPeerReviewId(String peerReviewId) { this.peerReviewId = peerReviewId; }
     public String getEvaluatorId() { return evaluatorId; }
     public void setEvaluatorId(String evaluatorId) { this.evaluatorId = evaluatorId; }
     public String getProposalId() { return proposalId; }

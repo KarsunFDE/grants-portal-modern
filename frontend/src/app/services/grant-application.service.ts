@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../environments/environment';
-import { GrantApplication, GrantApplicationCreate } from '../models/grant_application';
+import { GrantApplication, GrantApplicationCreate } from '../models/grant-application';
 
 /**
  * GrantApplication service — the "right" way to talk to the backend.

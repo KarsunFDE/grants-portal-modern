@@ -41,13 +41,13 @@ public class QnaService {
         this.auditLogger = auditLogger;
     }
 
-    public Optional<Qna> submit(String grant_applicationId, QnaRequest req, String actor) {
-        Optional<GrantApplication> solOpt = solRepo.findById(grant_applicationId);
+    public Optional<Qna> submit(String grantApplicationId, QnaRequest req, String actor) {
+        Optional<GrantApplication> solOpt = solRepo.findById(grantApplicationId);
         if (solOpt.isEmpty()) return Optional.empty();
         GrantApplication sol = solOpt.get();
 
         Qna q = new Qna();
-        q.setGrantApplicationId(grant_applicationId);
+        q.setGrantApplicationId(grantApplicationId);
         q.setAgencyId(sol.getAgencyId());
         // ⚠ Item 9 — raw HTML accepted.
         q.setQuestion(req.getQuestion());
@@ -59,7 +59,7 @@ public class QnaService {
         // ⚠ Item 2 — fire-and-forget.
         auditLogger.recordAsync("QNA_SUBMIT", "qna", saved.getId(), actor, sol.getAgencyId());
 
-        log.info("qna submitted grant_applicationId={} vendorId={}", grant_applicationId, req.getVendorId());
+        log.info("qna submitted grantApplicationId={} vendorId={}", grantApplicationId, req.getVendorId());
         return Optional.of(saved);
     }
 
@@ -76,8 +76,8 @@ public class QnaService {
         });
     }
 
-    public List<Qna> listForGrantApplication(String grant_applicationId) {
+    public List<Qna> listForGrantApplication(String grantApplicationId) {
         // ⚠ Item 10 — does not re-check caller agency.
-        return repo.findByGrantApplicationId(grant_applicationId);
+        return repo.findByGrantApplicationId(grantApplicationId);
     }
 }

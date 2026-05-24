@@ -7,7 +7,7 @@ import java.util.List;
 
 /**
  * ⚠ DELIBERATE — Item 10:
- *   {@code findAll()} returns grant_applications across ALL agencies. There is a
+ *   {@code findAll()} returns grantApplications across ALL agencies. There is a
  *   {@code findByAgencyId} method declared below — it just isn't called from
  *   {@code GrantApplicationService}. Cohort fixes in W2 Wed by switching all
  *   reads to {@code findByAgencyId} (and resolving agency from JWT).

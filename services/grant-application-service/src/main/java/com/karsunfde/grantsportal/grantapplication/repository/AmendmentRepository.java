@@ -7,7 +7,7 @@ import java.util.List;
 
 public interface AmendmentRepository extends MongoRepository<Amendment, String> {
 
-    List<Amendment> findByGrantApplicationIdOrderByNumberAsc(String grant_applicationId);
+    List<Amendment> findByGrantApplicationIdOrderByNumberAsc(String grantApplicationId);
 
     /** ⚠ Item 10 — declared but unused. */
     List<Amendment> findByAgencyId(String agencyId);

@@ -19,19 +19,19 @@ public class RouteConfig {
 
     @Bean
     public RouteLocator routes(RouteLocatorBuilder builder) {
-        String grant_applicationUrl = System.getenv().getOrDefault(
+        String grantApplicationUrl = System.getenv().getOrDefault(
             "SOLICITATION_SERVICE_URL", "http://grant-application-service:8081");
-        String peer_reviewUrl = System.getenv().getOrDefault(
+        String peerReviewUrl = System.getenv().getOrDefault(
             "EVALUATION_SERVICE_URL", "http://peer-review-service:8082");
         String aiUrl = System.getenv().getOrDefault(
             "AI_ORCHESTRATOR_URL", "http://ai-orchestrator:8000");
 
         return builder.routes()
-            .route("grant_applications", r -> r.path("/api/grant-applications/**").uri(grant_applicationUrl))
-            .route("peer_reviews",   r -> r.path("/api/peer-reviews/**").uri(peer_reviewUrl))
+            .route("grantApplications", r -> r.path("/api/grant-applications/**").uri(grantApplicationUrl))
+            .route("peerReviews",   r -> r.path("/api/peer-reviews/**").uri(peerReviewUrl))
             .route("ai",            r -> r.path("/api/ai/**").uri(aiUrl))
             // Item 1 — public path forwards to grant-application-service after signature-skip.
-            .route("public",        r -> r.path("/api/public/**").uri(grant_applicationUrl))
+            .route("public",        r -> r.path("/api/public/**").uri(grantApplicationUrl))
             .build();
     }
 }

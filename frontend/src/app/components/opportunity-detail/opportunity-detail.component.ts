@@ -1,7 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { GrantApplication } from '../../models/grant_application';
+import { GrantApplication } from '../../models/grant-application';
 import { Amendment } from '../../models/amendment';
 import { Qna } from '../../models/qna';
 import { FIXTURE_SOLICITATIONS, FIXTURE_AMENDMENTS, FIXTURE_QNA } from '../../services/mock-fixtures';
@@ -20,9 +20,9 @@ import { FIXTURE_SOLICITATIONS, FIXTURE_AMENDMENTS, FIXTURE_QNA } from '../../se
   template: `
     <div class="page-header">
       <div>
-        <h2>{{ grant_application?.title }}</h2>
+        <h2>{{ grantApplication?.title }}</h2>
         <div class="subtitle">
-          {{ grant_application?.noticeType }} · {{ grant_application?.agencyId }} · NAICS {{ grant_application?.naics }}
+          {{ grantApplication?.noticeType }} · {{ grantApplication?.agencyId }} · NAICS {{ grantApplication?.naics }}
         </div>
       </div>
       <a routerLink="/public/opportunities"><button class="secondary">← All opportunities</button></a>
@@ -35,7 +35,7 @@ import { FIXTURE_SOLICITATIONS, FIXTURE_AMENDMENTS, FIXTURE_QNA } from '../../se
           <!-- ⚠ Item 9: description rendered raw via innerHTML in the production
                version. Here we use text interpolation but the backend stores
                raw HTML; cohort discovers the W4 surface in the network tab. -->
-          <p>{{ grant_application?.description }}</p>
+          <p>{{ grantApplication?.description }}</p>
         </div>
 
         <div class="card">
@@ -59,11 +59,11 @@ import { FIXTURE_SOLICITATIONS, FIXTURE_AMENDMENTS, FIXTURE_QNA } from '../../se
           <h3>Key dates</h3>
           <table>
             <tbody>
-              <tr><th>Posted</th><td>{{ grant_application?.createdAt | date:'mediumDate' }}</td></tr>
-              <tr><th>Proposals due</th><td>{{ grant_application?.proposalsDueAt ? (grant_application?.proposalsDueAt | date:'medium') : '—' }}</td></tr>
-              <tr><th>Status</th><td><span class="badge" [ngClass]="(grant_application?.status || '').toLowerCase()">{{ grant_application?.status }}</span></td></tr>
-              <tr><th>Ceiling</th><td>\${{ (grant_application?.ceilingValue || 0).toLocaleString() }}</td></tr>
-              <tr><th>Set-aside</th><td>{{ grant_application?.setAside }}</td></tr>
+              <tr><th>Posted</th><td>{{ grantApplication?.createdAt | date:'mediumDate' }}</td></tr>
+              <tr><th>Proposals due</th><td>{{ grantApplication?.proposalsDueAt ? (grantApplication?.proposalsDueAt | date:'medium') : '—' }}</td></tr>
+              <tr><th>Status</th><td><span class="badge" [ngClass]="(grantApplication?.status || '').toLowerCase()">{{ grantApplication?.status }}</span></td></tr>
+              <tr><th>Ceiling</th><td>\${{ (grantApplication?.ceilingValue || 0).toLocaleString() }}</td></tr>
+              <tr><th>Set-aside</th><td>{{ grantApplication?.setAside }}</td></tr>
             </tbody>
           </table>
         </div>
@@ -97,7 +97,7 @@ import { FIXTURE_SOLICITATIONS, FIXTURE_AMENDMENTS, FIXTURE_QNA } from '../../se
 })
 export class OpportunityDetailComponent implements OnInit {
   id = '';
-  grant_application: GrantApplication | null = null;
+  grantApplication: GrantApplication | null = null;
   amendments: Amendment[] = [];
   qna: Qna[] = [];
 
@@ -105,9 +105,9 @@ export class OpportunityDetailComponent implements OnInit {
 
   ngOnInit(): void {
     this.id = this.route.snapshot.params['id'];
-    this.grant_application = FIXTURE_SOLICITATIONS.find((s) => s.id === this.id) ?? FIXTURE_SOLICITATIONS[0];
-    this.amendments = FIXTURE_AMENDMENTS.filter((a) => a.grant_applicationId === this.id);
-    this.qna = FIXTURE_QNA.filter((q) => q.grant_applicationId === this.id);
+    this.grantApplication = FIXTURE_SOLICITATIONS.find((s) => s.id === this.id) ?? FIXTURE_SOLICITATIONS[0];
+    this.amendments = FIXTURE_AMENDMENTS.filter((a) => a.grantApplicationId === this.id);
+    this.qna = FIXTURE_QNA.filter((q) => q.grantApplicationId === this.id);
   }
 
   publicQna(): Qna[] {
@@ -115,7 +115,7 @@ export class OpportunityDetailComponent implements OnInit {
   }
 
   sectionC(): string {
-    return `C.1 SCOPE. ${this.grant_application?.description || ''}\n\nC.2 BACKGROUND. Karsun-aligned federal acquisition modernization scope.\n\nC.3 TASKS.\nTask 1: Service Operations\nTask 2: Continuous Monitoring\nTask 3: Incident Response`;
+    return `C.1 SCOPE. ${this.grantApplication?.description || ''}\n\nC.2 BACKGROUND. Karsun-aligned federal acquisition modernization scope.\n\nC.3 TASKS.\nTask 1: Service Operations\nTask 2: Continuous Monitoring\nTask 3: Incident Response`;
   }
 
   sectionL(): string {

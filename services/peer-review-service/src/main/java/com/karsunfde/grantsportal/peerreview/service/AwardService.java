@@ -40,13 +40,13 @@ public class AwardService {
         this.auditLogger = auditLogger;
     }
 
-    public Optional<Award> recordAward(String peer_reviewId, String winningProposalId, String actor) {
-        Optional<PeerReview> eOpt = evalRepo.findById(peer_reviewId);
+    public Optional<Award> recordAward(String peerReviewId, String winningProposalId, String actor) {
+        Optional<PeerReview> eOpt = evalRepo.findById(peerReviewId);
         if (eOpt.isEmpty()) return Optional.empty();
         PeerReview e = eOpt.get();
 
         Award a = new Award();
-        a.setPeerReviewId(peer_reviewId);
+        a.setPeerReviewId(peerReviewId);
         a.setGrantApplicationId(e.getGrantApplicationId());
         a.setAgencyId(e.getAgencyId());
         a.setWinningProposalId(winningProposalId);

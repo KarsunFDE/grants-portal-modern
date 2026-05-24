@@ -2,7 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
-import { GrantApplication } from '../../models/grant_application';
+import { GrantApplication } from '../../models/grant-application';
 
 /**
  * GrantApplication list view.
@@ -11,7 +11,7 @@ import { GrantApplication } from '../../models/grant_application';
  *
  * This component hardcodes `http://localhost:8081/api/grant-applications` —
  * bypassing the API gateway at :8080. Compare with
- * {@link ../../services/grant_application.service.ts} which uses
+ * {@link ../../services/grant-application.service.ts} which uses
  * `environment.apiGatewayUrl`.
  *
  * The hardcode was introduced "temporarily" by a developer who couldn't
@@ -25,7 +25,7 @@ import { GrantApplication } from '../../models/grant_application';
   template: `
     <h2>GrantApplications</h2>
     <p>
-      <a routerLink-grant-applications/new"><button>+ New grant_application</button></a>
+      <a routerLink-grant-applications/new"><button>+ New grantApplication</button></a>
     </p>
     <div *ngIf="loading">Loading…</div>
     <div *ngIf="error" style="color: crimson">{{ error }}</div>
@@ -34,14 +34,14 @@ import { GrantApplication } from '../../models/grant_application';
         <tr><th>Title</th><th>Agency</th><th>Status</th><th>ID</th></tr>
       </thead>
       <tbody>
-        <tr *ngFor="let s of grant_applications">
+        <tr *ngFor="let s of grantApplications">
           <td>{{ s.title }}</td>
           <td>{{ s.agencyId }}</td>
           <td>{{ s.status }}</td>
           <td><code>{{ s.id }}</code></td>
         </tr>
-        <tr *ngIf="grant_applications.length === 0">
-          <td colspan="4"><em>No grant_applications yet. Create one!</em></td>
+        <tr *ngIf="grantApplications.length === 0">
+          <td colspan="4"><em>No grantApplications yet. Create one!</em></td>
         </tr>
       </tbody>
     </table>
@@ -51,7 +51,7 @@ export class GrantApplicationListComponent implements OnInit {
   // ⚠ Item 8 — hardcoded URL bypasses the API gateway at :8080.
   private apiUrl = 'http://localhost:8081/api/grant-applications';
 
-  grant_applications: GrantApplication[] = [];
+  grantApplications: GrantApplication[] = [];
   loading = true;
   error: string | null = null;
 
@@ -60,11 +60,11 @@ export class GrantApplicationListComponent implements OnInit {
   ngOnInit(): void {
     this.http.get<GrantApplication[]>(this.apiUrl).subscribe({
       next: (data) => {
-        this.grant_applications = data || [];
+        this.grantApplications = data || [];
         this.loading = false;
       },
       error: (err) => {
-        this.error = `Failed to load grant_applications: ${err.message ?? err}`;
+        this.error = `Failed to load grantApplications: ${err.message ?? err}`;
         this.loading = false;
       },
     });

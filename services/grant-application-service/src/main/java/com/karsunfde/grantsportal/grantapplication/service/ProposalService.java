@@ -41,13 +41,13 @@ public class ProposalService {
         this.auditLogger = auditLogger;
     }
 
-    public Optional<Proposal> submit(String grant_applicationId, ProposalSubmitRequest req, String actor) {
-        Optional<GrantApplication> solOpt = solRepo.findById(grant_applicationId);
+    public Optional<Proposal> submit(String grantApplicationId, ProposalSubmitRequest req, String actor) {
+        Optional<GrantApplication> solOpt = solRepo.findById(grantApplicationId);
         if (solOpt.isEmpty()) return Optional.empty();
         GrantApplication sol = solOpt.get();
 
         Proposal p = new Proposal();
-        p.setGrantApplicationId(grant_applicationId);
+        p.setGrantApplicationId(grantApplicationId);
         p.setAgencyId(sol.getAgencyId());
         p.setVendorId(req.getVendorId());
         p.setVolumes(req.getVolumes());
@@ -61,8 +61,8 @@ public class ProposalService {
         auditLogger.recordAsync("PROPOSAL_SUBMIT", "proposal", saved.getId(),
             actor, sol.getAgencyId());
 
-        log.info("proposal submitted grant_applicationId={} vendorId={}",
-            grant_applicationId, req.getVendorId());
+        log.info("proposal submitted grantApplicationId={} vendorId={}",
+            grantApplicationId, req.getVendorId());
         return Optional.of(saved);
     }
 
@@ -83,9 +83,9 @@ public class ProposalService {
         });
     }
 
-    public List<Proposal> listForGrantApplication(String grant_applicationId) {
+    public List<Proposal> listForGrantApplication(String grantApplicationId) {
         // ⚠ Item 10 — should re-check the caller's agency.
-        return repo.findByGrantApplicationId(grant_applicationId);
+        return repo.findByGrantApplicationId(grantApplicationId);
     }
 
     public List<Proposal> listForVendor(String vendorId) {

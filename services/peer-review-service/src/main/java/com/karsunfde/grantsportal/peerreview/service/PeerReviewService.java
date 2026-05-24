@@ -17,7 +17,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * Workflow 4 — peer_review → consensus → source selection → award (pre-award).
+ * Workflow 4 — peerReview → consensus → source selection → award (pre-award).
  *
  * Brownfield-debt items reinforced:
  *   - Item 3 — calls grant-application-service for each proposal text via
@@ -33,31 +33,31 @@ public class PeerReviewService {
 
     private final PeerReviewRepository evalRepo;
     private final PeerReviewScoreRepository scoreRepo;
-    private final GrantApplicationClient grant_applicationClient;
+    private final GrantApplicationClient grantApplicationClient;
     private final AiOrchestratorClient aiClient;
     private final EvalAuditLogger auditLogger;
 
     @Autowired
     public PeerReviewService(PeerReviewRepository evalRepo,
                              PeerReviewScoreRepository scoreRepo,
-                             GrantApplicationClient grant_applicationClient,
+                             GrantApplicationClient grantApplicationClient,
                              AiOrchestratorClient aiClient,
                              EvalAuditLogger auditLogger) {
         this.evalRepo = evalRepo;
         this.scoreRepo = scoreRepo;
-        this.grant_applicationClient = grant_applicationClient;
+        this.grantApplicationClient = grantApplicationClient;
         this.aiClient = aiClient;
         this.auditLogger = auditLogger;
     }
 
-    public PeerReview create(String grant_applicationId, String agencyId, String actor) {
+    public PeerReview create(String grantApplicationId, String agencyId, String actor) {
         PeerReview e = new PeerReview();
-        e.setGrantApplicationId(grant_applicationId);
+        e.setGrantApplicationId(grantApplicationId);
         e.setAgencyId(agencyId);
         e.setState("OPEN");
         e.setCreatedAt(Instant.now());
         PeerReview saved = evalRepo.save(e);
-        auditLogger.recordAsync("EVAL_CREATE", "peer_review", saved.getId(), actor, agencyId);
+        auditLogger.recordAsync("EVAL_CREATE", "peerReview", saved.getId(), actor, agencyId);
         return saved;
     }
 
@@ -65,30 +65,30 @@ public class PeerReviewService {
         return evalRepo.findById(id);
     }
 
-    public Optional<PeerReview> assignPanel(String peer_reviewId, List<String> panelMembers, String actor) {
-        return evalRepo.findById(peer_reviewId).map(e -> {
+    public Optional<PeerReview> assignPanel(String peerReviewId, List<String> panelMembers, String actor) {
+        return evalRepo.findById(peerReviewId).map(e -> {
             e.setPanelMembers(panelMembers);
             e.setState("PANEL_ASSIGNED");
             PeerReview saved = evalRepo.save(e);
-            auditLogger.recordAsync("EVAL_PANEL_ASSIGN", "peer_review", saved.getId(),
+            auditLogger.recordAsync("EVAL_PANEL_ASSIGN", "peerReview", saved.getId(),
                 actor, e.getAgencyId());
             return saved;
         });
     }
 
-    public Optional<PeerReviewScore> submitScore(String peer_reviewId, PeerReviewScore in, String actor) {
-        Optional<PeerReview> eOpt = evalRepo.findById(peer_reviewId);
+    public Optional<PeerReviewScore> submitScore(String peerReviewId, PeerReviewScore in, String actor) {
+        Optional<PeerReview> eOpt = evalRepo.findById(peerReviewId);
         if (eOpt.isEmpty()) return Optional.empty();
         PeerReview e = eOpt.get();
 
         // ⚠ Item 3 — fetches proposal context from grant-application-service for
         // each score submission. No circuit breaker; under TEP-week load
         // this is the thread-exhaustion reproducer.
-        Map<String, Object> proposal = grant_applicationClient.getGrantApplication(in.getProposalId());
-        log.info("score submission peer_reviewId={} proposalId={} proposal-loaded={}",
-            peer_reviewId, in.getProposalId(), proposal != null);
+        Map<String, Object> proposal = grantApplicationClient.getGrantApplication(in.getProposalId());
+        log.info("score submission peerReviewId={} proposalId={} proposal-loaded={}",
+            peerReviewId, in.getProposalId(), proposal != null);
 
-        in.setPeerReviewId(peer_reviewId);
+        in.setPeerReviewId(peerReviewId);
         in.setScoredAt(Instant.now());
         PeerReviewScore saved = scoreRepo.save(in);
 
@@ -96,7 +96,7 @@ public class PeerReviewService {
         auditLogger.recordAsync("EVAL_SCORE", "score", saved.getId(),
             actor, e.getAgencyId());
 
-        // Promote peer_review state on first score.
+        // Promote peerReview state on first score.
         if (!"SCORING".equals(e.getState())) {
             e.setState("SCORING");
             evalRepo.save(e);
@@ -105,8 +105,8 @@ public class PeerReviewService {
     }
 
     /** Aggregate panel consensus per proposal × factor. */
-    public Map<String, Map<String, Double>> consensus(String peer_reviewId) {
-        List<PeerReviewScore> scores = scoreRepo.findByPeerReviewId(peer_reviewId);
+    public Map<String, Map<String, Double>> consensus(String peerReviewId) {
+        List<PeerReviewScore> scores = scoreRepo.findByPeerReviewId(peerReviewId);
         Map<String, List<PeerReviewScore>> byProposal = scores.stream()
             .collect(Collectors.groupingBy(PeerReviewScore::getProposalId));
         Map<String, Map<String, Double>> out = new LinkedHashMap<>();
@@ -121,10 +121,10 @@ public class PeerReviewService {
     }
 
     /** Generate Source Selection Decision Document via ai-orchestrator. */
-    public Optional<Map<String, Object>> draftSsdd(String peer_reviewId, String actor) {
-        return evalRepo.findById(peer_reviewId).map(e -> {
+    public Optional<Map<String, Object>> draftSsdd(String peerReviewId, String actor) {
+        return evalRepo.findById(peerReviewId).map(e -> {
             // ⚠ Item 4 reinforcement — raw response returned; no schema check.
-            Map<String, Object> resp = aiClient.draftSsdd(peer_reviewId);
+            Map<String, Object> resp = aiClient.draftSsdd(peerReviewId);
             e.setState("CONSENSUS");
             e.setConsensusAt(Instant.now());
             // Store doc id placeholder from response if present.
@@ -132,7 +132,7 @@ public class PeerReviewService {
                 e.setSsddDocId(resp.get("clause_id").toString());
             }
             evalRepo.save(e);
-            auditLogger.recordAsync("SSDD_DRAFT", "peer_review", peer_reviewId,
+            auditLogger.recordAsync("SSDD_DRAFT", "peerReview", peerReviewId,
                 actor, e.getAgencyId());
             return resp;
         });

@@ -9,16 +9,16 @@
  *
  * Realism citations (all retrieved 2026-05-22 via /web-research):
  *   - SAM.gov opportunity record shape (NAICS, set-aside, posted_at)
- *   - DLA DIBBS grant_application IDs (`SPE…` prefix convention)
+ *   - DLA DIBBS grantApplication IDs (`SPE…` prefix convention)
  *   - GSA-FAS contract numbers (`GS-35F-…`)
  *   - CPARS rating bands per FAR 42.1503 (Exceptional → Unsatisfactory)
  */
 
-import { GrantApplication, GrantApplicationState } from '../models/grant_application';
+import { GrantApplication, GrantApplicationState } from '../models/grant-application';
 import { Amendment } from '../models/amendment';
 import { Qna } from '../models/qna';
 import { Proposal } from '../models/proposal';
-import { PeerReview, PeerReviewScore } from '../models/peer_review';
+import { PeerReview, PeerReviewScore } from '../models/peer-review';
 import { Award, ContractModification, Deliverable, Cpar } from '../models/award';
 import { Vendor } from '../models/vendor';
 import { AuditEvent } from '../models/audit';
@@ -84,7 +84,7 @@ export const FIXTURE_SOLICITATIONS: GrantApplication[] = [
 export const FIXTURE_AMENDMENTS: Amendment[] = [
   {
     id: 'am-0001',
-    grant_applicationId: 'sol-0142',
+    grantApplicationId: 'sol-0142',
     number: 1,
     changeSummary: 'Add CMMC Level 2 attestation to Section H minimum requirements.',
     effectiveAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 5).toISOString(),
@@ -95,7 +95,7 @@ export const FIXTURE_AMENDMENTS: Amendment[] = [
   },
   {
     id: 'am-0002',
-    grant_applicationId: 'sol-0142',
+    grantApplicationId: 'sol-0142',
     number: 2,
     changeSummary: 'Extend proposal deadline by 7 days; clarify Section L page limit (60 pages including ToC).',
     effectiveAt: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(),
@@ -109,7 +109,7 @@ export const FIXTURE_AMENDMENTS: Amendment[] = [
 export const FIXTURE_QNA: Qna[] = [
   {
     id: 'qa-001',
-    grant_applicationId: 'sol-0142',
+    grantApplicationId: 'sol-0142',
     question: 'Is the FedRAMP Moderate baseline a hard requirement at proposal submission or by award date?',
     answer: 'FedRAMP Moderate authorization (or In-Process status with completion path documented) is required at proposal submission per Section L.5.2.',
     vendorId: 'vnd-acme',
@@ -119,7 +119,7 @@ export const FIXTURE_QNA: Qna[] = [
   },
   {
     id: 'qa-002',
-    grant_applicationId: 'sol-0142',
+    grantApplicationId: 'sol-0142',
     question: 'Can past performance from a parent-company contract be cited?',
     answer: null,
     vendorId: 'vnd-globex',
@@ -129,7 +129,7 @@ export const FIXTURE_QNA: Qna[] = [
   },
   {
     id: 'qa-003',
-    grant_applicationId: 'sol-0142',
+    grantApplicationId: 'sol-0142',
     question: 'What is the period of performance start date assumed for Volume III pricing?',
     answer: null,
     vendorId: 'vnd-initech',
@@ -142,7 +142,7 @@ export const FIXTURE_QNA: Qna[] = [
 export const FIXTURE_PROPOSALS: Proposal[] = [
   {
     id: 'prop-001',
-    grant_applicationId: 'sol-0142',
+    grantApplicationId: 'sol-0142',
     vendorId: 'vnd-acme',
     vendorName: 'Acme Federal LLC',
     volumes: [
@@ -156,7 +156,7 @@ export const FIXTURE_PROPOSALS: Proposal[] = [
   },
   {
     id: 'prop-002',
-    grant_applicationId: 'sol-0142',
+    grantApplicationId: 'sol-0142',
     vendorId: 'vnd-globex',
     vendorName: 'Globex Federal Systems',
     volumes: [
@@ -170,7 +170,7 @@ export const FIXTURE_PROPOSALS: Proposal[] = [
   },
   {
     id: 'prop-003',
-    grant_applicationId: 'sol-0142',
+    grantApplicationId: 'sol-0142',
     vendorId: 'vnd-initech',
     vendorName: 'Initech Cloud Services',
     volumes: [
@@ -186,7 +186,7 @@ export const FIXTURE_PROPOSALS: Proposal[] = [
 
 export const FIXTURE_EVALUATION: PeerReview = {
   id: 'eval-0142',
-  grant_applicationId: 'sol-0142',
+  grantApplicationId: 'sol-0142',
   panelMembers: ['ev-allen', 'ev-mendez', 'ev-park'],
   factors: [
     { id: 'f-tech', name: 'Technical Approach', weight: 40, sectionM: 'M.3.1' },
@@ -207,8 +207,8 @@ export const FIXTURE_SCORES: PeerReviewScore[] = [
 
 export const FIXTURE_AWARD: Award = {
   id: 'aw-2026-001',
-  peer_reviewId: 'eval-0142',
-  grant_applicationId: 'sol-0142',
+  peerReviewId: 'eval-0142',
+  grantApplicationId: 'sol-0142',
   winningVendorId: 'vnd-acme',
   winningVendorName: 'Acme Federal LLC',
   contractNumber: 'GS-35F-0001V',

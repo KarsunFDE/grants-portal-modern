@@ -47,8 +47,8 @@ services:
       - "8080:8080"
     environment:
       JWT_ISSUER_URI: http://localhost:8090/auth
-      SOLICITATION_SERVICE_URL: http://grant-application-service:8081
-      EVALUATION_SERVICE_URL: http://peer-review-service:8082
+      GRANT_APPLICATION_SERVICE_URL: http://grant-application-service:8081
+      PEER_REVIEW_SERVICE_URL: http://peer-review-service:8082
       AI_ORCHESTRATOR_URL: http://ai-orchestrator:8000
     depends_on:
       - grant-application-service
@@ -79,7 +79,7 @@ services:
     ports:
       - "8082:8082"
     environment:
-      SOLICITATION_SERVICE_URL: http://grant-application-service:8081
+      GRANT_APPLICATION_SERVICE_URL: http://grant-application-service:8081
       # ⚠ DELIBERATE: peer-review-service calls grant-application-service directly,
       #   not through the gateway — tighter coupling than necessary, and the
       #   call has no circuit breaker (Item 3).

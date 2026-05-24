@@ -21,14 +21,14 @@ import { Amendment } from '../../models/amendment';
   template: `
     <div class="page-header">
       <div>
-        <h2>Amendments — {{ grant_applicationTitle() }}</h2>
+        <h2>Amendments — {{ grantApplicationTitle() }}</h2>
         <div class="subtitle">FAR 15.206 · CO-only issuance · vendor acknowledgement required</div>
       </div>
-      <a [routerLink-grant-applications', grant_applicationId, 'edit']"><button class="secondary">← Back to grant_application</button></a>
+      <a [routerLink-grant-applications', grantApplicationId, 'edit']"><button class="secondary">← Back to grantApplication</button></a>
     </div>
 
     <div class="card" *ngIf="role.currentRole !== 'contracting_officer'">
-      <p>You are not the Contracting Officer for this grant_application; amendments are read-only.</p>
+      <p>You are not the Contracting Officer for this grantApplication; amendments are read-only.</p>
     </div>
 
     <div class="card">
@@ -89,7 +89,7 @@ import { Amendment } from '../../models/amendment';
   `,
 })
 export class AmendmentEditorComponent implements OnInit {
-  grant_applicationId = '';
+  grantApplicationId = '';
   amendments: Amendment[] = [];
 
   draft = {
@@ -103,22 +103,22 @@ export class AmendmentEditorComponent implements OnInit {
   constructor(private route: ActivatedRoute, public role: RoleService) {}
 
   ngOnInit(): void {
-    this.grant_applicationId = this.route.snapshot.params['id'];
-    this.amendments = FIXTURE_AMENDMENTS.filter((a) => a.grant_applicationId === this.grant_applicationId);
+    this.grantApplicationId = this.route.snapshot.params['id'];
+    this.amendments = FIXTURE_AMENDMENTS.filter((a) => a.grantApplicationId === this.grantApplicationId);
   }
 
-  grant_applicationTitle(): string {
-    return FIXTURE_SOLICITATIONS.find((s) => s.id === this.grant_applicationId)?.title ?? this.grant_applicationId;
+  grantApplicationTitle(): string {
+    return FIXTURE_SOLICITATIONS.find((s) => s.id === this.grantApplicationId)?.title ?? this.grantApplicationId;
   }
 
   totalProposalCount(): number {
-    return FIXTURE_PROPOSALS.filter((p) => p.grant_applicationId === this.grant_applicationId).length;
+    return FIXTURE_PROPOSALS.filter((p) => p.grantApplicationId === this.grantApplicationId).length;
   }
 
   aiDraft(): void {
     // Stubbed — W3 multi-agent flow predicts impact then drafts text.
     this.draft.changeSummary =
-      `Per FAR 15.206, this amendment ${this.draft.changeSummary || 'modifies the grant_application'} ` +
+      `Per FAR 15.206, this amendment ${this.draft.changeSummary || 'modifies the grantApplication'} ` +
       `effective ${this.draft.effectiveAt}. Vendors with proposals-in-progress must acknowledge ` +
       `prior to the revised deadline.`;
     this.impactPrediction = {
@@ -132,7 +132,7 @@ export class AmendmentEditorComponent implements OnInit {
     // Stubbed — would call AmendmentService.issue().
     const next: Amendment = {
       id: `am-new-${Date.now()}`,
-      grant_applicationId: this.grant_applicationId,
+      grantApplicationId: this.grantApplicationId,
       number: this.amendments.length + 1,
       changeSummary: this.draft.changeSummary,
       effectiveAt: new Date(this.draft.effectiveAt).toISOString(),

@@ -1,7 +1,7 @@
 package com.karsunfde.grantsportal.grantapplication.dto;
 
 /**
- * Create-grant_application request DTO.
+ * Create-grantApplication request DTO.
  *
  * ⚠ DELIBERATE — Item 9:
  *   No {@code @SafeHtml}, no {@code @NotBlank}, no length cap on

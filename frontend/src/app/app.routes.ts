@@ -45,7 +45,7 @@ export const routes: Routes = [
   { path: 'reports/contract-spend', component: ReportsHubComponent },
 
   // — GrantApplication lifecycle
-  // NOTE: /grant_applications still routes to the LEGACY GrantApplicationListComponent
+  // NOTE: /grantApplications still routes to the LEGACY GrantApplicationListComponent
   // which hardcodes http://localhost:8081 (Item 8). PRESERVED as the W4 Tue
   // teaching artifact. New components route through environment.apiGatewayUrl.
   { path: 'grant-applications', component: GrantApplicationListComponent },

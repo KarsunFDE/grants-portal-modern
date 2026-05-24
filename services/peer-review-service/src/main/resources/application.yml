@@ -12,7 +12,7 @@ spring:
 
 grant_application:
   service:
-    url: ${SOLICITATION_SERVICE_URL:http://grant-application-service:8081}
+    url: ${GRANT_APPLICATION_SERVICE_URL:http://grant-application-service:8081}
 
 ai:
   orchestrator:

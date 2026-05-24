@@ -5,7 +5,7 @@ import { environment } from '../../environments/environment';
 import { Amendment, AmendmentCreate } from '../models/amendment';
 
 /**
- * Amendments to a published grant_application (FAR 15.206).
+ * Amendments to a published grantApplication (FAR 15.206).
  *
  * Routes through `environment.apiGatewayUrl` — the right way. Compare
  * with `grant-application-list.component.ts` which hardcodes :8081 per Item 8.
@@ -14,15 +14,15 @@ import { Amendment, AmendmentCreate } from '../models/amendment';
 export class AmendmentService {
   constructor(private http: HttpClient) {}
 
-  list(grant_applicationId: string): Observable<Amendment[]> {
+  list(grantApplicationId: string): Observable<Amendment[]> {
     return this.http.get<Amendment[]>(
-      `${environment.apiGatewayUrl}/api/grant-applications/${grant_applicationId}/amendments`,
+      `${environment.apiGatewayUrl}/api/grant-applications/${grantApplicationId}/amendments`,
     );
   }
 
-  issue(grant_applicationId: string, req: AmendmentCreate): Observable<Amendment> {
+  issue(grantApplicationId: string, req: AmendmentCreate): Observable<Amendment> {
     return this.http.post<Amendment>(
-      `${environment.apiGatewayUrl}/api/grant-applications/${grant_applicationId}/amendments`,
+      `${environment.apiGatewayUrl}/api/grant-applications/${grantApplicationId}/amendments`,
       req,
     );
   }

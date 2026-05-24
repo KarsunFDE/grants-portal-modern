@@ -7,7 +7,7 @@ import java.util.List;
 import java.util.Optional;
 
 public interface AwardRepository extends MongoRepository<Award, String> {
-    Optional<Award> findByPeerReviewId(String peer_reviewId);
+    Optional<Award> findByPeerReviewId(String peerReviewId);
     /** ⚠ Item 10 — declared but unused. */
     List<Award> findByAgencyId(String agencyId);
 }
