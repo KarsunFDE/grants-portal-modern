@@ -1,0 +1,35 @@
+server:
+  port: 8082
+
+spring:
+  application:
+    name: peer-review-service
+  data:
+    mongodb:
+      uri: ${MONGO_URL:mongodb://app:app_dev_password@localhost:27017}
+      database: ${MONGO_DB:grants_portal_modern}
+      auto-index-creation: true
+
+grant_application:
+  service:
+    url: ${SOLICITATION_SERVICE_URL:http://grant-application-service:8081}
+
+ai:
+  orchestrator:
+    url: ${AI_ORCHESTRATOR_URL:http://ai-orchestrator:8000}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+
+logging:
+  # ⚠ DELIBERATE — Item 6: peer-review-service uses traceId.
+  pattern:
+    console: "%d{HH:mm:ss.SSS} %-5level [traceId=%X{traceId:-}] %logger{36} - %msg%n"
+  level:
+    com.karsunfde.grantsportal: INFO

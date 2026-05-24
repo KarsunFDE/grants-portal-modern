@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+         http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-parent</artifactId>
+    <version>2.7.18</version>
+    <relativePath/>
+  </parent>
+
+  <groupId>com.karsunfde.grantsportal</groupId>
+  <artifactId>grant-application-service</artifactId>
+  <version>0.1.0-brownfield</version>
+  <packaging>jar</packaging>
+
+  <properties>
+    <java.version>11</java.version>
+  </properties>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-data-mongodb</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-actuator</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
+    </dependency>
+    <!-- DELIBERATE legacy debt — AWS SDK for Java v1 (EOS Dec 31 2025).
+         W5 Mon AWS SDK v1 -> v2 migration exercise drives this via
+         Q Developer transformation capability. Pinned to last stable v1
+         line. Per D-053 (Reduced Path A) + D-056 (single-branch). -->
+    <dependency>
+      <groupId>com.amazonaws</groupId>
+      <artifactId>aws-java-sdk-s3</artifactId>
+      <version>1.12.787</version>
+    </dependency>
+    <!-- DELIBERATE: no spring-boot-starter-validation imported. The cohort
+         adds it in W4 Wed when they sanitize input (Item 9). -->
+
+    <!-- Test scope only. Brings JUnit Jupiter, Mockito, AssertJ.
+         Required by T27 brownfield-debt locked-failing tests (items 2, 9, 10).
+         Spec: fde-10-week/pipeline/T27-debt-enforcement-spec.md -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-test</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-maven-plugin</artifactId>
+      </plugin>
+      <!-- Exclude T27 brownfield-debt locked-failing tests from default
+           `mvn test`. These tests are run + asserted-failing by the
+           debt-enforcement workflow via `make verify-debt-locks` (see
+           .github/scripts/run-locked-tests.sh + fde-10-week/pipeline/
+           T27-debt-enforcement-spec.md). Including them in default
+           surefire would make the normal ci workflow chronically red
+           by design — that conflicts with using ci green/red as a
+           regression signal during cohort-driven modernization work. -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <configuration>
+          <excludedGroups>brownfield_debt</excludedGroups>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+</project>
