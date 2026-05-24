@@ -36,6 +36,7 @@ from pydantic import BaseModel
 from app.main import app
 
 
+@pytest.mark.brownfield_debt
 @pytest.mark.brownfield_debt_4
 def test_draft_grant_application_has_pydantic_response_model_DEBT_LOCKED() -> None:
     """When item 4 is modernized, /draft-grant-application declares a Pydantic BaseModel response_model.
@@ -65,6 +66,7 @@ def test_draft_grant_application_has_pydantic_response_model_DEBT_LOCKED() -> No
     )
 
 
+@pytest.mark.brownfield_debt
 @pytest.mark.brownfield_debt_4
 def test_draft_grant_application_never_returns_null_clause_id_DEBT_LOCKED() -> None:
     """When item 4 is modernized, no call returns null clause_id."""
