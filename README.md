@@ -33,7 +33,7 @@
 |------|------|
 | [`acquire-gov`](https://github.com/KarsunFDE/acquire-gov) | The trainer brownfield this repo was derived from. Same 12 baseline debt items + same architecture. |
 | [`content`](https://github.com/KarsunFDE/content) | Cohort-facing async content (pre-session, war-room, scenarios) — public |
-| [`domain-knowledge`](https://github.com/KarsunFDE/domain-knowledge) | Federal-acquisitions references (FAR/DFARS, OIG/OMB, grants regs) — public |
+| [`domain-knowledge`](https://github.com/KarsunFDE/domain-knowledge) | Federal-acquisitions corpus — 11 `/web-research`-sourced briefs. Pair-anchor: [`federal-grants-management`](https://github.com/KarsunFDE/domain-knowledge/blob/main/federal-grants-management.md) (2 CFR 200, Grants.gov, GrantSolutions). Public. |
 | `assessment-ec` | Checkpoint exams + audit rubrics — **private, not associate-visible** |
 | `training-resources` | Instructor-facing daily walkthroughs + EOD task specs — **private, not associate-visible** |
 
