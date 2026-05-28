@@ -4,15 +4,15 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { RoleService } from '../../services/role.service';
 import { FIXTURE_EVALUATION, FIXTURE_PROPOSALS, FIXTURE_SCORES } from '../../services/mock-fixtures';
-import { PeerReviewFactor } from '../../models/peer-review';
+import { MeritCriterion } from '../../models/peer-review';
 
 /**
- * Source Selection Tradeoff + SSDD draft (FAR 15.308).
+ * Merit-review consensus + funding-recommendation draft (2 CFR 200.205).
  *
- * SSA-only gate. AI drafts SSDD tradeoff narrative; SSA reviews + signs.
- * SSA authority cannot delegate (FAR 15.303(b)(6)). This is the
+ * SSA-only gate stands in for the Selecting Official who approves the panel's
+ * funding recommendation; this authority cannot be delegated. This is the
  * W3 LangGraph HITL #5 deep-dive surface — interrupt-before-node at
- * "consensus complete" and "award ready".
+ * "consensus complete" and "award decision ready".
  */
 @Component({
   selector: 'app-consensus-ssdd',
@@ -21,32 +21,32 @@ import { PeerReviewFactor } from '../../models/peer-review';
   template: `
     <div class="page-header">
       <div>
-        <h2>Source selection — tradeoff &amp; SSDD</h2>
-        <div class="subtitle">FAR 15.308 · SSA authority non-delegable</div>
+        <h2>Merit review — consensus &amp; funding recommendation</h2>
+        <div class="subtitle">2 CFR 200.205 · Selecting Official authority non-delegable</div>
       </div>
-      <a routerLink="/peer-review/workspace"><button class="secondary">← Evaluator workspace</button></a>
+      <a routerLink="/peer-review/workspace"><button class="secondary">← Reviewer workspace</button></a>
     </div>
 
     <div class="hitl-banner">
       <strong>HITL gate (W3 #5 — LangGraph deep-dive):</strong>
-      AI drafts SSDD tradeoff narrative; SSA must review &amp; sign.
-      LangGraph interrupt-before-node fires at "award ready".
+      AI drafts the funding-recommendation narrative; the Selecting Official must review &amp; approve.
+      LangGraph interrupt-before-node fires at "award decision ready".
     </div>
 
     <div class="card">
-      <h3>Tradeoff matrix</h3>
+      <h3>Consensus score matrix</h3>
       <table>
         <thead>
           <tr>
-            <th>Proposal</th>
-            <th *ngFor="let f of peerReview.factors">{{ f.name }} <small>({{ f.weight }}%)</small></th>
+            <th>Application</th>
+            <th *ngFor="let c of peerReview.criteria">{{ c.name }} <small>({{ c.weight }}%)</small></th>
             <th>Weighted total</th>
           </tr>
         </thead>
         <tbody>
           <tr *ngFor="let p of proposals">
             <td><strong>{{ p.vendorName }}</strong></td>
-            <td *ngFor="let f of peerReview.factors">{{ avgScore(p.id, f.id) | number:'1.0-1' }}</td>
+            <td *ngFor="let c of peerReview.criteria">{{ avgScore(p.id, c.id) | number:'1.0-1' }}</td>
             <td><strong>{{ weighted(p.id) | number:'1.0-2' }}</strong></td>
           </tr>
         </tbody>
@@ -54,19 +54,19 @@ import { PeerReviewFactor } from '../../models/peer-review';
     </div>
 
     <div class="card">
-      <h3>SSDD draft (AI-assisted)</h3>
-      <button class="secondary" (click)="aiDraft()">▦ AI-draft SSDD narrative</button>
+      <h3>Funding recommendation draft (AI-assisted)</h3>
+      <button class="secondary" (click)="aiDraft()">▦ AI-draft recommendation narrative</button>
       <textarea rows="10" [(ngModel)]="ssddNarrative" style="margin-top:0.5rem"></textarea>
       <div style="margin-top:0.75rem;display:flex;gap:0.5rem;align-items:center">
         <button [disabled]="role.currentRole !== 'ssa'" (click)="sign()">
-          ✓ SSA sign &amp; record award
+          ✓ Approve &amp; record award decision
         </button>
         <small *ngIf="role.currentRole !== 'ssa'" style="color:var(--color-fg-muted)">
-          Only the SSA can sign (FAR 15.303(b)(6)).
+          Only the Selecting Official can approve.
         </small>
       </div>
       <div *ngIf="signed" class="card" style="background:var(--color-bg);margin-top:1rem">
-        <strong>✓ Award recorded:</strong> {{ winningName() }} —
+        <strong>✓ Award decision recorded:</strong> {{ winningName() }} —
         <a routerLink="/awards/aw-2026-001">aw-2026-001</a>
       </div>
     </div>
@@ -82,15 +82,15 @@ export class ConsensusSsddComponent {
     // Route param `solId` reserved for multi-peerReview routing.
   }
 
-  avgScore(proposalId: string, factorId: string): number {
-    const matches = FIXTURE_SCORES.filter((s) => s.proposalId === proposalId && s.factorId === factorId);
+  avgScore(proposalId: string, criterionId: string): number {
+    const matches = FIXTURE_SCORES.filter((s) => s.proposalId === proposalId && s.meritCriterionId === criterionId);
     if (!matches.length) return 5;
     return matches.reduce((sum, s) => sum + s.score, 0) / matches.length;
   }
 
   weighted(proposalId: string): number {
-    return this.peerReview.factors.reduce(
-      (sum: number, f: PeerReviewFactor) => sum + this.avgScore(proposalId, f.id) * (f.weight / 100),
+    return this.peerReview.criteria.reduce(
+      (sum: number, c: MeritCriterion) => sum + this.avgScore(proposalId, c.id) * (c.weight / 100),
       0,
     );
   }
@@ -100,13 +100,12 @@ export class ConsensusSsddComponent {
       .map((p) => ({ id: p.id, name: p.vendorName, score: this.weighted(p.id) }))
       .sort((a, b) => b.score - a.score)[0];
     this.ssddNarrative =
-      `Source Selection Decision Document (SSDD)\n\n` +
-      `Pursuant to FAR 15.308, the Source Selection Authority has determined that ` +
-      `${best.name} represents the best value to the Government under the ` +
-      `peerReview criteria of Section M. The weighted technical score of ` +
-      `${best.score.toFixed(2)} is consistent with the tradeoff analysis between ` +
-      `technical capability, past performance, and price.\n\n` +
-      `[AI-DRAFTED — SSA must review for factual accuracy. Item 4 (no Pydantic schema), Item 5 (legacy LLMChain).]`;
+      `Funding Recommendation Memo\n\n` +
+      `Pursuant to 2 CFR 200.205, the merit-review panel recommends that ` +
+      `${best.name} be selected for funding under the published merit criteria. ` +
+      `The weighted consensus score of ${best.score.toFixed(2)} reflects the panel's ` +
+      `assessment of significance, approach, and feasibility across the application.\n\n` +
+      `[AI-DRAFTED — the Selecting Official must review for factual accuracy. Item 4 (no Pydantic schema), Item 5 (legacy LLMChain).]`;
   }
 
   sign(): void {

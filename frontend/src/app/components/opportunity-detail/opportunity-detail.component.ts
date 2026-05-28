@@ -7,11 +7,11 @@ import { Qna } from '../../models/qna';
 import { FIXTURE_SOLICITATIONS, FIXTURE_AMENDMENTS, FIXTURE_QNA } from '../../services/mock-fixtures';
 
 /**
- * Public-facing Opportunity Detail.
+ * Public-facing funding-opportunity (NOFO) detail.
  *
- * Renders Sections A–M, amendments timeline, public Q&A history.
- * The description renders raw (Item 9) — a teaching surface for
- * W4 Wed AI Security (prompt-injection-via-stored-content).
+ * Renders project narrative, budget narrative, merit criteria, amendments
+ * timeline, public Q&A history. The description renders raw (Item 9) — a
+ * teaching surface for W4 Wed AI Security (prompt-injection-via-stored-content).
  */
 @Component({
   selector: 'app-opportunity-detail',
@@ -22,7 +22,7 @@ import { FIXTURE_SOLICITATIONS, FIXTURE_AMENDMENTS, FIXTURE_QNA } from '../../se
       <div>
         <h2>{{ grantApplication?.title }}</h2>
         <div class="subtitle">
-          {{ grantApplication?.noticeType }} · {{ grantApplication?.agencyId }} · NAICS {{ grantApplication?.naics }}
+          {{ grantApplication?.opportunityNumber }} · {{ grantApplication?.awardingAgency || grantApplication?.agencyId }} · ALN {{ grantApplication?.assistanceListingNumber }}
         </div>
       </div>
       <a routerLink="/public/opportunities"><button class="secondary">← All opportunities</button></a>
@@ -31,7 +31,7 @@ import { FIXTURE_SOLICITATIONS, FIXTURE_AMENDMENTS, FIXTURE_QNA } from '../../se
     <div class="two-col">
       <div>
         <div class="card">
-          <h3>Description</h3>
+          <h3>Project abstract</h3>
           <!-- ⚠ Item 9: description rendered raw via innerHTML in the production
                version. Here we use text interpolation but the backend stores
                raw HTML; cohort discovers the W4 surface in the network tab. -->
@@ -39,31 +39,31 @@ import { FIXTURE_SOLICITATIONS, FIXTURE_AMENDMENTS, FIXTURE_QNA } from '../../se
         </div>
 
         <div class="card">
-          <h3>Section C — Statement of Work</h3>
+          <h3>Project Narrative</h3>
           <pre style="white-space:pre-wrap;font-family:inherit">{{ sectionC() }}</pre>
         </div>
 
         <div class="card">
-          <h3>Section L — Instructions to Offerors</h3>
+          <h3>Budget Narrative</h3>
           <pre style="white-space:pre-wrap;font-family:inherit">{{ sectionL() }}</pre>
         </div>
 
         <div class="card">
-          <h3>Section M — PeerReview Factors</h3>
+          <h3>Merit-review criteria</h3>
           <pre style="white-space:pre-wrap;font-family:inherit">{{ sectionM() }}</pre>
         </div>
       </div>
 
       <div>
         <div class="card">
-          <h3>Key dates</h3>
+          <h3>Key dates &amp; funding</h3>
           <table>
             <tbody>
               <tr><th>Posted</th><td>{{ grantApplication?.createdAt | date:'mediumDate' }}</td></tr>
-              <tr><th>Proposals due</th><td>{{ grantApplication?.proposalsDueAt ? (grantApplication?.proposalsDueAt | date:'medium') : '—' }}</td></tr>
+              <tr><th>Period of performance</th><td>{{ grantApplication?.periodOfPerformanceEnd ? (grantApplication?.periodOfPerformanceEnd | date:'mediumDate') : '—' }}</td></tr>
               <tr><th>Status</th><td><span class="badge" [ngClass]="(grantApplication?.status || '').toLowerCase()">{{ grantApplication?.status }}</span></td></tr>
-              <tr><th>Ceiling</th><td>\${{ (grantApplication?.ceilingValue || 0).toLocaleString() }}</td></tr>
-              <tr><th>Set-aside</th><td>{{ grantApplication?.setAside }}</td></tr>
+              <tr><th>Federal request</th><td>\${{ (grantApplication?.requestedAmountFederal || 0).toLocaleString() }}</td></tr>
+              <tr><th>Funding instrument</th><td>{{ grantApplication?.fundingInstrument }}</td></tr>
             </tbody>
           </table>
         </div>
@@ -115,14 +115,17 @@ export class OpportunityDetailComponent implements OnInit {
   }
 
   sectionC(): string {
-    return `C.1 SCOPE. ${this.grantApplication?.description || ''}\n\nC.2 BACKGROUND. Karsun-aligned federal acquisition modernization scope.\n\nC.3 TASKS.\nTask 1: Service Operations\nTask 2: Continuous Monitoring\nTask 3: Incident Response`;
+    return this.grantApplication?.sections?.projectNarrative
+      ?? `1. SIGNIFICANCE. ${this.grantApplication?.description || ''}\n\n2. APPROACH. Program design, service delivery, and capacity building over the period of performance.\n\n3. FEASIBILITY. Investigator experience and realistic timeline.`;
   }
 
   sectionL(): string {
-    return 'L.5.2 Volume I — Technical (60 pages)\nL.5.3 Volume II — Past Performance\nL.5.4 Volume III — Price';
+    return this.grantApplication?.sections?.budgetNarrative
+      ?? 'Personnel and fringe (2 CFR 200 Subpart E)\nTravel and equipment\nIndirect costs (de minimis 10% or negotiated NICRA)';
   }
 
   sectionM(): string {
-    return 'M.3.1 Technical Approach (40%)\nM.3.2 Management Approach (25%)\nM.3.3 Past Performance (20%)\nM.3.4 Price (15%)';
+    return this.grantApplication?.sections?.meritCriteria
+      ?? 'Significance (40%)\nApproach (30%)\nFeasibility / Investigator (20%)\nBudget reasonableness (10%)';
   }
 }

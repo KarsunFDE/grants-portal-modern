@@ -80,14 +80,14 @@ class DraftRequest(BaseModel):
 
 
 class QaDraftRequest(BaseModel):
-    """Vendor Q&A drafting request. ⚠ Item 4 — no Field constraints."""
+    """Applicant Q&A drafting request. ⚠ Item 4 — no Field constraints."""
     question: str
     grant_application_id: str | None = None
     constraints: str | None = None
 
 
 class ClauseSearchRequest(BaseModel):
-    """Hybrid RAG over FAR/DFARS clause library. ⚠ Item 4 — no Field."""
+    """Hybrid RAG over the 2 CFR 200 Uniform Guidance corpus. ⚠ Item 4 — no Field."""
     query: str
     far_part: str | None = None
     agency_id: str | None = None  # ⚠ Item 10 surface — not enforced upstream
@@ -95,15 +95,25 @@ class ClauseSearchRequest(BaseModel):
 
 
 class FactorSuggestRequest(BaseModel):
-    """Section M factor-narrative suggestion. ⚠ Item 4 — no Field."""
+    """Merit-criterion review-narrative suggestion. ⚠ Item 4 — no Field."""
     topic: str
     constraints: str | None = None
 
 
 class IntakeTriageRequest(BaseModel):
-    """Multi-agent proposal-intake triage request. ⚠ Item 4 — no Field."""
+    """Multi-agent application-intake triage request. ⚠ Item 4 — no Field."""
     proposal_id: str
     grant_application_id: str | None = None
+    raw_text: str | None = None
+
+
+class EligibilityCheckRequest(BaseModel):
+    """Eligibility/completeness screening request (2 CFR 200.206). ⚠ Item 4 — no Field."""
+    grant_application_id: str | None = None
+    applicant_type: str | None = None
+    applicant_uei: str | None = None
+    assistance_listing_number: str | None = None
+    requested_amount_federal: float | None = None
     raw_text: str | None = None
 
 
@@ -139,9 +149,9 @@ def draft_grant_application(req: DraftRequest) -> dict[str, Any]:
     # Bedrock call (D-060). Drops result into 'draft' field; preserves the
     # null-clause_id drift surface on top.
     bedrock = invoke_model(
-        f"Draft a federal acquisition clause paragraph about: {req.topic}. "
+        f"Draft a federal grant project-narrative paragraph about: {req.topic}. "
         f"Constraints: {req.constraints or 'none'}.",
-        system="You draft FAR/DFARS-compliant grant_application language.",
+        system="You draft 2 CFR 200-compliant grant application narrative language.",
     )
 
     # ⚠ Item 4 — 1-in-3 returns null clause_id; downstream service can break.
@@ -154,10 +164,45 @@ def draft_grant_application(req: DraftRequest) -> dict[str, Any]:
 
     # Otherwise return a "happy" stub.
     return {
-        "clause_id": f"FAR-52.{random.randint(200, 250)}-{random.randint(1, 30)}",
+        "clause_id": f"2-CFR-200.{random.randint(200, 350)}-{random.randint(1, 30)}",
         "draft": bedrock["body"],
         "model": BEDROCK_MODEL_ID,
         "region": AWS_REGION,
+    }
+
+
+@app.post("/check-eligibility")
+def check_eligibility(req: EligibilityCheckRequest) -> dict[str, Any]:
+    """
+    Eligibility / completeness screening for an incoming grant application
+    (2 CFR 200.205-206 — merit + risk review). Returns a recommendation the
+    Program Officer reviews before advancing INTAKE → SCREENING → PEER_REVIEW.
+
+    ⚠ DELIBERATE — Item 4: no Pydantic response model; returns a raw dict.
+    ⚠ Item 6 — no correlation-id forwarded.
+    """
+    log.info("check-eligibility application_id=%r applicant_type=%r",
+             req.grant_application_id, req.applicant_type)
+    bedrock = invoke_model(
+        f"Screen this grant application for eligibility and completeness. "
+        f"Applicant type: {req.applicant_type or '(unknown)'}; "
+        f"Assistance Listing: {req.assistance_listing_number or '(none)'}; "
+        f"Federal request: {req.requested_amount_federal or '(none)'}. "
+        f"Context: {req.raw_text or '(none)'}",
+        system="You screen federal grant applications for eligibility and "
+               "completeness under 2 CFR 200; flag missing SF-424 items and "
+               "ineligible applicant types. A Program Officer makes the final call.",
+    )
+    # Trivial rule-of-thumb eligibility heuristic (cohort replaces in W2).
+    ineligible_types = {"INDIVIDUAL", "FOR_PROFIT"}
+    eligible = (req.applicant_type or "").upper() not in ineligible_types
+    return {
+        "grant_application_id": req.grant_application_id,
+        "eligible": eligible,
+        "screening_notes": bedrock["body"],
+        "recommended_status": "PEER_REVIEW" if eligible else "WITHDRAWN",
+        "hitl_gate": "program-officer-review-required",
+        "model": BEDROCK_MODEL_ID,
     }
 
 
@@ -174,9 +219,9 @@ def draft_amendment(req: DraftRequest) -> dict[str, Any]:
     """
     log.info("draft-amendment called topic=%r", req.topic)
     bedrock = invoke_model(
-        f"Draft an amendment narrative for: {req.topic}. "
-        f"Vendor-impact considerations: {req.constraints or 'standard scope change'}.",
-        system="You draft FAR 15.206-compliant amendment narratives.",
+        f"Draft a NOFO amendment narrative for: {req.topic}. "
+        f"Applicant-impact considerations: {req.constraints or 'standard scope change'}.",
+        system="You draft Grants.gov NOFO amendment narratives (2 CFR 200.204).",
     )
     return {
         "amendment_text": bedrock["body"],
@@ -198,9 +243,9 @@ def answer_qa(req: QaDraftRequest) -> dict[str, Any]:
     """
     log.info("answer-qa called question=%r", req.question[:60])
     bedrock = invoke_model(
-        f"Vendor question: {req.question}\n\n"
-        f"Draft a FAR-compliant agency answer. Cite clause IDs where applicable.",
-        system="You answer vendor questions about federal grant_applications.",
+        f"Applicant question: {req.question}\n\n"
+        f"Draft a 2 CFR 200-compliant agency answer. Cite section IDs where applicable.",
+        system="You answer applicant questions about federal funding opportunities (NOFOs).",
     )
     return {
         "answer_draft": bedrock["body"],
@@ -228,14 +273,14 @@ def rag_clause_search(req: ClauseSearchRequest) -> dict[str, Any]:
     # ⚠ Atlas Vector Search call would land here; stub returns a shaped
     # response so the surface flows.
     bedrock = invoke_model(
-        f"Summarize FAR/DFARS clauses relevant to: {req.query}",
-        system="You retrieve FAR/DFARS clauses; cite clause IDs.",
+        f"Summarize 2 CFR 200 / 45 CFR 75 sections relevant to: {req.query}",
+        system="You retrieve Uniform Guidance (2 CFR 200) sections; cite section IDs.",
     )
     hits = [
-        {"clause_id": "FAR-52.212-4", "title": "Contract Terms and Conditions",
-         "score": 0.91, "far_part": "FAR"},
-        {"clause_id": "DFARS-252.204-7012", "title": "Safeguarding Covered Defense Information",
-         "score": 0.87, "far_part": "DFARS"},
+        {"clause_id": "2-CFR-200.205", "title": "Federal awarding agency review of merit of proposals",
+         "score": 0.91, "far_part": "2 CFR 200"},
+        {"clause_id": "2-CFR-200.430", "title": "Compensation — personal services (allowable costs)",
+         "score": 0.87, "far_part": "2 CFR 200"},
     ][: req.top_k]
     return {
         "query": req.query,
@@ -255,9 +300,9 @@ def eval_factor_suggest(req: FactorSuggestRequest) -> dict[str, Any]:
     """
     log.info("eval/factor-suggest topic=%r", req.topic)
     bedrock = invoke_model(
-        f"Suggest a Section M factor narrative for: {req.topic}. "
-        f"Proposal context: {req.constraints or '(none)'}",
-        system="You suggest evaluator narrative; HITL approves before publish.",
+        f"Suggest a merit-criterion review narrative for: {req.topic}. "
+        f"Application context: {req.constraints or '(none)'}",
+        system="You suggest peer-reviewer narrative; HITL approves before publish.",
     )
     return {
         "narrative_suggestion": bedrock["body"],
@@ -279,15 +324,15 @@ def eval_ssdd_draft(req: DraftRequest) -> dict[str, Any]:
     """
     log.info("eval/ssdd-draft topic=%r", req.topic)
     bedrock = invoke_model(
-        f"Draft an SSDD tradeoff narrative for: {req.topic}. "
-        f"Constraints: {req.constraints or 'best-value-tradeoff per FAR 15.101-1'}.",
-        system="You draft Source Selection Decision Documents; SSA reviews + signs.",
+        f"Draft a panel funding-recommendation narrative for: {req.topic}. "
+        f"Constraints: {req.constraints or 'merit-based selection per 2 CFR 200.205'}.",
+        system="You draft funding-recommendation memos; the Selecting Official reviews + approves.",
     )
     # Provide a clause_id field so peer-review-service can stash it.
     return {
         "ssdd_narrative": bedrock["body"],
-        "clause_id": f"SSDD-{random.randint(1000, 9999)}",
-        "hitl_gate": "ssa-signature-required",
+        "clause_id": f"REC-{random.randint(1000, 9999)}",
+        "hitl_gate": "selecting-official-approval-required",
         "model": BEDROCK_MODEL_ID,
     }
 
@@ -308,16 +353,16 @@ def agent_intake_triage(req: IntakeTriageRequest) -> dict[str, Any]:
     """
     log.info("agent/intake-triage proposal_id=%r", req.proposal_id)
     classify = invoke_model(
-        f"Classify this proposal's NAICS + complexity: {req.raw_text or req.proposal_id}",
-        system="You classify federal proposals for TEP routing.",
+        f"Classify this application's program area + complexity: {req.raw_text or req.proposal_id}",
+        system="You classify federal grant applications for merit-review-panel routing.",
     )
     route = invoke_model(
-        f"Recommend 3 TEP evaluators for proposal_id={req.proposal_id}.",
-        system="You route proposals to TEP members based on factor expertise.",
+        f"Recommend 3 peer reviewers for application_id={req.proposal_id}.",
+        system="You route applications to peer-review-panel members based on subject expertise.",
     )
     anomaly = invoke_model(
-        f"Flag anomalies in proposal_id={req.proposal_id} that warrant CO escalation.",
-        system="You flag anomalies (responsiveness, eligibility, set-aside).",
+        f"Flag anomalies in application_id={req.proposal_id} that warrant Program Officer escalation.",
+        system="You flag anomalies (completeness, eligibility, conflict of interest).",
     )
     return {
         "proposal_id": req.proposal_id,
@@ -345,7 +390,7 @@ def draft_grant_application_v1(req: DraftRequest) -> dict[str, Any]:
     #   prompt | bedrock_llm | StrOutputParser()
     # We just demonstrate the construction without invoking it.
     prompt = ChatPromptTemplate.from_messages([
-        ("system", "You draft federal acquisition clauses."),
+        ("system", "You draft federal grant project narratives."),
         ("user", "Draft a paragraph about: {topic}. Constraints: {constraints}."),
     ])
     parser = StrOutputParser()
@@ -355,7 +400,7 @@ def draft_grant_application_v1(req: DraftRequest) -> dict[str, Any]:
              req.topic)
 
     return {
-        "clause_id": f"FAR-52.{random.randint(200, 250)}-{random.randint(1, 30)}",
+        "clause_id": f"2-CFR-200.{random.randint(200, 350)}-{random.randint(1, 30)}",
         "draft": f"[stub-v1] composed-runnable draft about {req.topic}",
         "model": BEDROCK_MODEL_ID,
         "pattern": "prompt | llm | parser",

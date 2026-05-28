@@ -7,6 +7,15 @@
  * originating service request.
  */
 export type NotificationKind =
+  // Grants-management kinds (2 CFR 200 Uniform Guidance lifecycle).
+  | 'NOFO_PUBLISHED'
+  | 'APPLICATION_RECEIVED'
+  | 'MERIT_REVIEW_DUE'
+  | 'AWARD_ISSUED'
+  | 'PERFORMANCE_REPORT_DUE'
+  | 'OIG_FINDING_OPENED'
+  // Legacy pre-grants acquisition kinds — retained for inherited surfaces
+  // that still reference them; not emitted on grants events.
   | 'SOLICITATION_PUBLISHED'
   | 'AMENDMENT_ISSUED'
   | 'PROPOSAL_RECEIVED'
@@ -14,8 +23,7 @@ export type NotificationKind =
   | 'AWARD_DECISION'
   | 'CPAR_WINDOW_OPEN'
   | 'QASP_FINDING'
-  | 'DEBRIEF_REQUESTED'
-  | 'OIG_FINDING_OPENED';
+  | 'DEBRIEF_REQUESTED';
 
 export interface Notification {
   id: string;

@@ -14,7 +14,8 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
- * Public SAM.gov-style opportunity search. Anonymous read surface.
+ * Public Grants.gov-style funding-opportunity (NOFO) search. Anonymous read
+ * surface — applicants browse open opportunities before applying.
  *
  * ⚠ Item 1 — this is the path the gateway's JwtSignatureSkipFilter accepts
  *   unsigned JWTs on.
@@ -36,17 +37,17 @@ public class PublicOpportunitiesController {
         this.amendmentSvc = amendmentSvc;
     }
 
-    /** SAM.gov-style facet filters (naics, setAside, agency, posted-date). */
+    /** Grants.gov-style facet filters (assistance listing, funding instrument, agency). */
     @GetMapping
-    public List<GrantApplication> list(@RequestParam(required = false) String naics,
-                                    @RequestParam(required = false) String setAside,
+    public List<GrantApplication> list(@RequestParam(required = false) String assistanceListing,
+                                    @RequestParam(required = false) String fundingInstrument,
                                     @RequestParam(required = false) String agency) {
         // ⚠ Item 10 — public listing always crosses tenants; cohort sees the
         // same pattern in private list endpoints (which is the actual bug).
         return svc.listAll().stream()
-            .filter(s -> "PUBLISHED".equals(s.getStatus()) || "AMENDED".equals(s.getStatus()))
-            .filter(s -> naics == null || naics.equals(s.getNaics()))
-            .filter(s -> setAside == null || setAside.equals(s.getSetAside()))
+            .filter(s -> "SCREENING".equals(s.getStatus()) || "PEER_REVIEW".equals(s.getStatus()))
+            .filter(s -> assistanceListing == null || assistanceListing.equals(s.getAssistanceListingNumber()))
+            .filter(s -> fundingInstrument == null || fundingInstrument.equals(s.getFundingInstrument()))
             .filter(s -> agency == null || agency.equals(s.getAgencyId()))
             .collect(Collectors.toList());
     }

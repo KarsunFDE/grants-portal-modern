@@ -58,7 +58,7 @@ def draft_with_legacy_chain(topic: str, constraints: str | None, llm: Any) -> st
     prompt = PromptTemplate(
         input_variables=["topic", "constraints"],
         template=(
-            "You draft federal acquisition clauses. "
+            "You draft federal grant project narratives. "
             "Draft a paragraph about: {topic}. Constraints: {constraints}."
         ),
     )

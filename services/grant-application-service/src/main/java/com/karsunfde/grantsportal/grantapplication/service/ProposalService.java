@@ -54,7 +54,7 @@ public class ProposalService {
         p.setAcknowledgedAmendments(req.getAcknowledgedAmendments());
         p.setStatus("SEALED");
         p.setSubmittedAt(Instant.now());
-        p.setSealedUntil(sol.getClosingAt());
+        p.setSealedUntil(sol.getPeriodOfPerformanceEnd());
         Proposal saved = repo.save(p);
 
         // ⚠ Item 2.

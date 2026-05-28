@@ -26,8 +26,10 @@ export class RoleService {
     const stored = typeof localStorage !== 'undefined'
       ? localStorage.getItem(STORAGE_KEY)
       : null;
+    // Default persona is the Program Officer (program_manager) per the grants
+    // reshape — owns the NOFO + merit-review workflow.
     const initial = ROLE_PROFILES.find((p) => p.role === stored)
-      ?? ROLE_PROFILES.find((p) => p.role === 'contracting_officer')!;
+      ?? ROLE_PROFILES.find((p) => p.role === 'program_manager')!;
     this.subject = new BehaviorSubject<RoleProfile>(initial);
     this.profile$ = this.subject.asObservable();
   }

@@ -5,7 +5,10 @@ import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.Instant;
 
-/** Per-evaluator, per-proposal, per-factor score. FAR 15.305. */
+/**
+ * Per-reviewer, per-application, per-merit-criterion score
+ * (2 CFR 200.205 merit review).
+ */
 @Document(collection = "peer_review_scores")
 public class PeerReviewScore {
 
@@ -13,10 +16,12 @@ public class PeerReviewScore {
     private String id;
 
     private String peerReviewId;
-    private String evaluatorId;
+    private String reviewerId;
+    /** Application being scored (this is the proposal/application snapshot id). */
     private String proposalId;
-    private String factorId;
-    private int score;       // raw 0-100 or factor-defined scale
+    /** Merit criterion this score applies to (e.g., significance, approach). */
+    private String meritCriterionId;
+    private int score;       // raw 0-100 or criterion-defined scale
     private String narrative;
     private Instant scoredAt;
 
@@ -26,12 +31,12 @@ public class PeerReviewScore {
     public void setId(String id) { this.id = id; }
     public String getPeerReviewId() { return peerReviewId; }
     public void setPeerReviewId(String peerReviewId) { this.peerReviewId = peerReviewId; }
-    public String getEvaluatorId() { return evaluatorId; }
-    public void setEvaluatorId(String evaluatorId) { this.evaluatorId = evaluatorId; }
+    public String getReviewerId() { return reviewerId; }
+    public void setReviewerId(String reviewerId) { this.reviewerId = reviewerId; }
     public String getProposalId() { return proposalId; }
     public void setProposalId(String proposalId) { this.proposalId = proposalId; }
-    public String getFactorId() { return factorId; }
-    public void setFactorId(String factorId) { this.factorId = factorId; }
+    public String getMeritCriterionId() { return meritCriterionId; }
+    public void setMeritCriterionId(String meritCriterionId) { this.meritCriterionId = meritCriterionId; }
     public int getScore() { return score; }
     public void setScore(int score) { this.score = score; }
     public String getNarrative() { return narrative; }

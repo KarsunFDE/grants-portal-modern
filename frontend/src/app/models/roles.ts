@@ -1,9 +1,21 @@
 /**
- * Federal acquisitions role model.
+ * Federal grants-management role model.
  *
  * Mirrors the JWT `role` claim defined in feature-inventory-target.md
  * personas table. FedRAMP RBAC AC-2/AC-5 (least-privilege +
- * separation-of-duties).
+ * separation-of-duties). Authority notes cite 2 CFR 200 (Uniform Guidance).
+ *
+ * The underlying `Role` enum keys are inherited from the acquisition baseline
+ * and intentionally unchanged so route guards / `role.guard.ts` stay stable;
+ * the cohort renames the enum keys themselves in W4–W5. The grants-facing
+ * personas below are mapped onto those keys:
+ *   contracting_officer → Grants Management Officer (signs the award)
+ *   program_manager     → Program Officer (default; owns the program/NOFO)
+ *   evaluator           → Peer Reviewer (merit review)
+ *   vendor              → Grantee / Principal Investigator (external applicant)
+ *   oig_reviewer        → OIG (audit)
+ * `contract_specialist` and `ssa` have no first-class grants equivalent yet and
+ * are relabeled as support/legacy personas.
  *
  * NOTE: this is a mock role-switcher for cohort instructor demos.
  * Production RBAC resolves role from validated JWT in the API gateway
@@ -31,47 +43,51 @@ export interface RoleProfile {
 
 export const ROLE_PROFILES: RoleProfile[] = [
   {
-    role: 'contracting_officer',
-    displayName: 'Dana Reeves (CO, GSA-FAS)',
-    agencyId: 'GSA-FAS',
-    authorityNote: 'Sign award, issue amendment, terminate contract (FAR 1.602-1).',
-  },
-  {
-    role: 'contract_specialist',
-    displayName: 'Miguel Ortiz (CS, GSA-FAS)',
-    agencyId: 'GSA-FAS',
-    authorityNote: 'Draft grantApplications; cannot sign award (FAR 1.603).',
-  },
-  {
+    // Program Officer — default persona. Owns the program / NOFO and the
+    // pre-award merit-review process (2 CFR 200.205).
     role: 'program_manager',
-    displayName: 'Priya Shah (PM, GSA-FAS)',
-    agencyId: 'GSA-FAS',
-    authorityNote: 'Requirements + CPAR draft (FAR 42.1503).',
+    displayName: 'Priya Shah (Program Officer, HHS-ACF)',
+    agencyId: 'HHS-ACF',
+    authorityNote: 'Owns NOFO + program; manages merit review (2 CFR 200.204-205). Cannot sign the Federal award.',
   },
   {
-    role: 'ssa',
-    displayName: 'Col. Whitfield (SSA, GSA-FAS)',
-    agencyId: 'GSA-FAS',
-    authorityNote: 'Source Selection Authority — final award (FAR 15.303(b)(6)).',
+    role: 'contracting_officer',
+    displayName: 'Dana Reeves (Grants Management Officer, HHS-ACF)',
+    agencyId: 'HHS-ACF',
+    authorityNote: 'Signs the Federal award, issues amendments, certifies obligations (2 CFR 200.211 / 200.308).',
   },
   {
     role: 'evaluator',
-    displayName: 'Dr. Allen (TEP evaluator, GSA-FAS)',
-    agencyId: 'GSA-FAS',
-    authorityNote: 'Score assigned proposals against Section M (FAR 15.305).',
+    displayName: 'Dr. Allen (Peer Reviewer, merit panel)',
+    agencyId: 'HHS-ACF',
+    authorityNote: 'Scores assigned applications against published merit criteria (2 CFR 200.205). COI attestation required.',
   },
   {
     role: 'vendor',
-    displayName: 'Acme Federal LLC (DUNS 12-345-6789)',
+    displayName: 'Dr. Maria Alvarez (Grantee / PI — Appalachian Regional Health Coalition, UEI AB1CDE2FGHI3)',
     agencyId: null,
     vendorDuns: '123456789',
-    authorityNote: 'Submit proposals; rebuttal on CPAR (FAR 42.1503(d)).',
+    authorityNote: 'External applicant: submit SF-424 application; file post-award performance reports (2 CFR 200.328-329).',
   },
   {
     role: 'oig_reviewer',
     displayName: 'Inspector Park (OIG)',
-    agencyId: 'GSA-OIG',
-    authorityNote: 'Read-only across tenants; open findings.',
+    agencyId: 'HHS-OIG',
+    authorityNote: 'Read-only across awarding agencies; open audit findings (2 CFR 200.337).',
+  },
+  {
+    // Support persona — no first-class grants role yet (relabeled from CS).
+    role: 'contract_specialist',
+    displayName: 'Miguel Ortiz (Grants Specialist, HHS-ACF)',
+    agencyId: 'HHS-ACF',
+    authorityNote: 'Drafts applications + award packages; cannot sign the Federal award.',
+  },
+  {
+    // Legacy pre-grants authority retained for inherited source-selection surfaces.
+    role: 'ssa',
+    displayName: 'Col. Whitfield (Selecting Official — legacy pre-grants)',
+    agencyId: 'HHS-ACF',
+    authorityNote: 'Legacy final-selection authority retained for inherited merit-consensus surface; W4–W5 repurposes.',
   },
   {
     role: 'sys_admin',

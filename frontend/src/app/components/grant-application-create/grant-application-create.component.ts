@@ -6,7 +6,7 @@ import { GrantApplicationService } from '../../services/grant-application.servic
 import { GrantApplicationCreate } from '../../models/grant-application';
 
 /**
- * New-grantApplication form.
+ * New grant-application form (quick intake — the full SF-424 flow is the wizard).
  *
  * ⚠ DELIBERATE — Item 8 reinforcement / Item 9 reinforcement:
  *   - The `description` textarea has NO maxlength, NO required validator,
@@ -20,20 +20,30 @@ import { GrantApplicationCreate } from '../../models/grant-application';
   standalone: true,
   imports: [CommonModule, FormsModule],
   template: `
-    <h2>New grantApplication</h2>
+    <h2>New grant application</h2>
     <form (ngSubmit)="onSubmit()" #form="ngForm">
       <p>
-        <label>Title<br>
+        <label>Project title<br>
           <input name="title" [(ngModel)]="model.title"/>
         </label>
       </p>
       <p>
-        <label>Agency ID<br>
+        <label>Opportunity number (NOFO)<br>
+          <input name="opportunityNumber" [(ngModel)]="model.opportunityNumber"/>
+        </label>
+      </p>
+      <p>
+        <label>Applicant organization<br>
+          <input name="applicantOrg" [(ngModel)]="model.applicantOrg"/>
+        </label>
+      </p>
+      <p>
+        <label>Awarding agency<br>
           <input name="agencyId" [(ngModel)]="model.agencyId"/>
         </label>
       </p>
       <p>
-        <label>Description<br>
+        <label>Project abstract<br>
           <textarea name="description" [(ngModel)]="model.description" rows="6"></textarea>
         </label>
       </p>
@@ -51,7 +61,9 @@ export class GrantApplicationCreateComponent {
     agencyId: '',
     title: '',
     description: '',
-    status: 'DRAFT',
+    status: 'INTAKE',
+    opportunityNumber: '',
+    applicantOrg: '',
   };
   submitting = false;
   error: string | null = null;

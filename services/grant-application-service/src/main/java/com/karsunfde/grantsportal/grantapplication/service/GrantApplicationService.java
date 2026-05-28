@@ -14,11 +14,11 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * GrantApplication business logic. Workflow 1 (drafting -> publication).
+ * GrantApplication business logic. Grants intake → award lifecycle.
  *
- * State machine:
- *   DRAFT -> INTERNAL_REVIEW -> READY_TO_PUBLISH -> PUBLISHED -> (AMENDED)* -> CLOSED
- *   CANCELLED reachable from any pre-PUBLISHED state.
+ * Workflow statuses (2 CFR 200 Subparts C → D):
+ *   INTAKE -> SCREENING -> PEER_REVIEW -> AWARD_DECISION -> POST_AWARD_REPORTING
+ *   -> (CLOSEOUT). WITHDRAWN reachable from any pre-AWARD_DECISION state.
  *
  * Brownfield-debt items present in this class:
  *   - Item 2 — {@link AuditLogger#recordAsync} runs after response flushes.
@@ -52,7 +52,19 @@ public class GrantApplicationService {
         s.setTitle(req.getTitle());
         // ⚠ Item 9 — no Jsoup.clean, no escape, no length cap.
         s.setDescription(req.getDescription());
-        s.setStatus(req.getStatus() != null ? req.getStatus() : "DRAFT");
+        s.setStatus(req.getStatus() != null ? req.getStatus() : "INTAKE");
+        s.setOpportunityNumber(req.getOpportunityNumber());
+        s.setAssistanceListingNumber(req.getAssistanceListingNumber());
+        s.setAwardingAgency(req.getAwardingAgency());
+        s.setApplicantOrg(req.getApplicantOrg());
+        s.setApplicantUei(req.getApplicantUei());
+        s.setApplicantType(req.getApplicantType());
+        s.setFundingInstrument(req.getFundingInstrument());
+        s.setRequestedAmountFederal(req.getRequestedAmountFederal());
+        s.setCostShareMatch(req.getCostShareMatch());
+        if (req.getPrincipalInvestigatorName() != null) {
+            s.setPrincipalInvestigator(req.getPrincipalInvestigatorName());
+        }
         s.setCreatedAt(Instant.now());
         s.setUpdatedAt(Instant.now());
 
@@ -116,31 +128,33 @@ public class GrantApplicationService {
     }
 
     /**
-     * Transition DRAFT/INTERNAL_REVIEW/READY_TO_PUBLISH -> PUBLISHED.
-     * FAR 5.203 publication. ⚠ Item 2 — publish event audit-logged async.
+     * Submit a completed application for eligibility/completeness screening.
+     * INTAKE -> SCREENING (2 CFR 200.205). ⚠ Item 2 — submit event
+     * audit-logged async.
      */
     public Optional<GrantApplication> publish(String id, String actor) {
         return repo.findById(id).map(s -> {
-            s.setStatus("PUBLISHED");
-            s.setPostedAt(Instant.now());
+            s.setStatus("SCREENING");
+            s.setSubmittedAt(Instant.now());
             s.setUpdatedAt(Instant.now());
             GrantApplication saved = repo.save(s);
             // ⚠ Item 2.
-            auditLogger.recordAsync("PUBLISH", "grantApplication", saved.getId(),
+            auditLogger.recordAsync("SUBMIT", "grantApplication", saved.getId(),
                 actor, saved.getAgencyId());
-            log.info("grantApplication published id={} agencyId={}",
+            log.info("grantApplication submitted for screening id={} agencyId={}",
                 saved.getId(), saved.getAgencyId());
             return saved;
         });
     }
 
+    /** Applicant withdraws (or agency rejects at screening). */
     public Optional<GrantApplication> cancel(String id, String actor) {
         return repo.findById(id).map(s -> {
-            s.setStatus("CANCELLED");
+            s.setStatus("WITHDRAWN");
             s.setUpdatedAt(Instant.now());
             GrantApplication saved = repo.save(s);
             // ⚠ Item 2.
-            auditLogger.recordAsync("CANCEL", "grantApplication", saved.getId(),
+            auditLogger.recordAsync("WITHDRAW", "grantApplication", saved.getId(),
                 actor, saved.getAgencyId());
             return saved;
         });

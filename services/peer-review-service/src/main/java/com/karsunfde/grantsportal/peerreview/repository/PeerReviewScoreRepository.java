@@ -8,5 +8,5 @@ import java.util.List;
 public interface PeerReviewScoreRepository extends MongoRepository<PeerReviewScore, String> {
     List<PeerReviewScore> findByPeerReviewId(String peerReviewId);
     List<PeerReviewScore> findByPeerReviewIdAndProposalId(String peerReviewId, String proposalId);
-    List<PeerReviewScore> findByEvaluatorId(String evaluatorId);
+    List<PeerReviewScore> findByReviewerId(String reviewerId);
 }

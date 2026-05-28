@@ -4,14 +4,20 @@
  * The grants-portal-modern backend endpoints listed in feature-inventory-target.md
  * are scaffold-level; many return empty or 404 against the current
  * legacy stack. To keep instructor-driven demos showing realistic
- * federal-acquisitions data even without a fully populated DB, every
+ * federal grants-management data even without a fully populated DB, every
  * page falls back to these fixtures on HTTP error.
  *
- * Realism citations (all retrieved 2026-05-22 via /web-research):
- *   - SAM.gov opportunity record shape (NAICS, set-aside, posted_at)
- *   - DLA DIBBS grantApplication IDs (`SPE…` prefix convention)
- *   - GSA-FAS contract numbers (`GS-35F-…`)
- *   - CPARS rating bands per FAR 42.1503 (Exceptional → Unsatisfactory)
+ * Realism citations (all retrieved 2026-05-28 via /web-research):
+ *   - SF-424 "Application for Federal Assistance" field set (opportunity #,
+ *     Assistance Listing / CFDA, applicant UEI, applicant type)
+ *   - Grants.gov NOFO record shape (opportunity number convention)
+ *   - 2 CFR 200 Uniform Guidance (funding instrument, period of performance,
+ *     merit review §200.205, post-award reporting §200.328-329)
+ *
+ * NOTE: Vendor / Award / Cpar / ContractModification / Deliverable fixtures
+ * below are inherited acquisition-edge demo data the pair repurposes or
+ * deletes in W4–W5 modernization (see domain-mapping.md "Additional inherited
+ * entities"). Left intact so edge components still render.
  */
 
 import { GrantApplication, GrantApplicationState } from '../models/grant-application';
@@ -26,57 +32,84 @@ import { Finding } from '../models/finding';
 
 export const FIXTURE_SOLICITATIONS: GrantApplication[] = [
   {
-    id: 'sol-0142',
-    agencyId: 'GSA-FAS',
-    title: 'Cloud Managed Services BPA — Civilian Agencies',
-    description: 'Enterprise cloud managed services across AWS GovCloud + Azure Government for 11 civilian agencies under the GSA-FAS umbrella.',
-    status: 'PUBLISHED' as GrantApplicationState,
-    naics: '541512',
-    setAside: 'FULL_AND_OPEN',
-    contractType: 'BPA',
-    ceilingValue: 110_000_000,
-    noticeType: 'RFP',
-    proposalsDueAt: new Date(Date.now() + 1000 * 60 * 60 * 24 * 14).toISOString(),
+    id: 'app-0142',
+    agencyId: 'HHS-ACF',
+    title: 'Community Health Worker Capacity-Building in Rural Clinics',
+    description: 'Expands the community health worker workforce across 11 rural counties to improve preventive-care access for underserved populations.',
+    status: 'PEER_REVIEW' as GrantApplicationState,
+    opportunityNumber: 'HHS-2026-ACF-OCS-EE-0142',
+    assistanceListingNumber: '93.243',
+    awardingAgency: 'HHS-ACF',
+    applicantOrg: 'Appalachian Regional Health Coalition',
+    applicantUei: 'AB1CDE2FGHI3',
+    applicantType: 'NONPROFIT',
+    principalInvestigator: 'Dr. Maria Alvarez',
+    fundingInstrument: 'GRANT',
+    requestedAmountFederal: 1_250_000,
+    costShareMatch: 250_000,
+    periodOfPerformanceStart: new Date(Date.now() + 1000 * 60 * 60 * 24 * 60).toISOString(),
+    periodOfPerformanceEnd: new Date(Date.now() + 1000 * 60 * 60 * 24 * 425).toISOString(),
     createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 21).toISOString(),
+    // legacy mirror (edge dashboards/public browse)
+    proposalsDueAt: new Date(Date.now() + 1000 * 60 * 60 * 24 * 14).toISOString(),
   },
   {
-    id: 'sol-0203',
-    agencyId: 'GSA-FAS',
-    title: 'Acquisition Modernization Software Engineering',
-    description: 'AI-assisted modernization engineering team to support CAMEO/COMET portfolio.',
-    status: 'PUBLISHED' as GrantApplicationState,
-    naics: '541511',
-    setAside: '8A',
-    contractType: 'T_AND_M',
-    ceilingValue: 25_000_000,
-    noticeType: 'RFP',
-    proposalsDueAt: new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString(),
+    id: 'app-0203',
+    agencyId: 'NSF',
+    title: 'Undergraduate Research in Coastal Resilience Modeling',
+    description: 'A cooperative agreement establishing a research-experience program training undergraduates in coastal-resilience and sea-level-rise modeling.',
+    status: 'PEER_REVIEW' as GrantApplicationState,
+    opportunityNumber: 'NSF-26-0203',
+    assistanceListingNumber: '47.050',
+    awardingAgency: 'NSF',
+    applicantOrg: 'State University of Example',
+    applicantUei: 'ZX9YWV8UTSR7',
+    applicantType: 'IHE',
+    principalInvestigator: 'Dr. Samuel Park',
+    fundingInstrument: 'COOPERATIVE_AGREEMENT',
+    requestedAmountFederal: 600_000,
+    costShareMatch: 0,
+    periodOfPerformanceStart: new Date(Date.now() + 1000 * 60 * 60 * 24 * 90).toISOString(),
+    periodOfPerformanceEnd: new Date(Date.now() + 1000 * 60 * 60 * 24 * 1185).toISOString(),
     createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 35).toISOString(),
+    proposalsDueAt: new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString(),
   },
   {
-    id: 'sol-0301',
-    agencyId: 'GSA-FAS',
-    title: 'Sources Sought — Zero-Trust Architecture Assessment',
-    description: 'RFI seeking industry input on zero-trust assessments for FedRAMP Moderate enclaves.',
-    status: 'PUBLISHED' as GrantApplicationState,
-    naics: '541519',
-    setAside: 'SDVOSB',
-    contractType: 'FFP',
-    ceilingValue: 1_500_000,
-    noticeType: 'SOURCES_SOUGHT',
+    id: 'app-0301',
+    agencyId: 'DOE',
+    title: 'Weatherization Assistance for Low-Income Households',
+    description: 'Formula-style weatherization services reducing energy burden for low-income households in three tribal communities.',
+    status: 'SCREENING' as GrantApplicationState,
+    opportunityNumber: 'DE-FOA-0000301',
+    assistanceListingNumber: '81.042',
+    awardingAgency: 'DOE',
+    applicantOrg: 'Three Rivers Tribal Council',
+    applicantUei: 'IN0TECHFGHIJ',
+    applicantType: 'OTHER',
+    principalInvestigator: 'Joseph Whitefeather',
+    fundingInstrument: 'GRANT',
+    requestedAmountFederal: 480_000,
+    costShareMatch: 48_000,
+    periodOfPerformanceStart: new Date(Date.now() + 1000 * 60 * 60 * 24 * 45).toISOString(),
+    periodOfPerformanceEnd: new Date(Date.now() + 1000 * 60 * 60 * 24 * 410).toISOString(),
     createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 9).toISOString(),
   },
   {
-    id: 'sol-0418',
-    agencyId: 'GSA-FAS',
-    title: 'Draft — Multi-Cloud Observability Stack Procurement',
-    description: 'Pre-publication draft. Internal review pending.',
-    status: 'INTERNAL_REVIEW' as GrantApplicationState,
-    naics: '541519',
-    setAside: 'FULL_AND_OPEN',
-    contractType: 'IDIQ',
-    ceilingValue: 50_000_000,
-    noticeType: 'RFP',
+    id: 'app-0418',
+    agencyId: 'HHS-ACF',
+    title: 'Draft — Early Childhood Mentorship Pilot',
+    description: 'Pre-submission draft. Completeness review pending.',
+    status: 'INTAKE' as GrantApplicationState,
+    opportunityNumber: 'HHS-2026-ACF-OCS-EE-0418',
+    assistanceListingNumber: '93.600',
+    awardingAgency: 'HHS-ACF',
+    applicantOrg: 'Bright Futures Nonprofit',
+    applicantUei: 'BF7UTURES2026',
+    applicantType: 'NONPROFIT',
+    principalInvestigator: 'Dr. Lena Okafor',
+    fundingInstrument: 'GRANT',
+    requestedAmountFederal: 320_000,
+    costShareMatch: 32_000,
     createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 3).toISOString(),
   },
 ];
@@ -84,7 +117,7 @@ export const FIXTURE_SOLICITATIONS: GrantApplication[] = [
 export const FIXTURE_AMENDMENTS: Amendment[] = [
   {
     id: 'am-0001',
-    grantApplicationId: 'sol-0142',
+    grantApplicationId: 'app-0142',
     number: 1,
     changeSummary: 'Add CMMC Level 2 attestation to Section H minimum requirements.',
     effectiveAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 5).toISOString(),
@@ -95,7 +128,7 @@ export const FIXTURE_AMENDMENTS: Amendment[] = [
   },
   {
     id: 'am-0002',
-    grantApplicationId: 'sol-0142',
+    grantApplicationId: 'app-0142',
     number: 2,
     changeSummary: 'Extend proposal deadline by 7 days; clarify Section L page limit (60 pages including ToC).',
     effectiveAt: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(),
@@ -109,7 +142,7 @@ export const FIXTURE_AMENDMENTS: Amendment[] = [
 export const FIXTURE_QNA: Qna[] = [
   {
     id: 'qa-001',
-    grantApplicationId: 'sol-0142',
+    grantApplicationId: 'app-0142',
     question: 'Is the FedRAMP Moderate baseline a hard requirement at proposal submission or by award date?',
     answer: 'FedRAMP Moderate authorization (or In-Process status with completion path documented) is required at proposal submission per Section L.5.2.',
     vendorId: 'vnd-acme',
@@ -119,7 +152,7 @@ export const FIXTURE_QNA: Qna[] = [
   },
   {
     id: 'qa-002',
-    grantApplicationId: 'sol-0142',
+    grantApplicationId: 'app-0142',
     question: 'Can past performance from a parent-company contract be cited?',
     answer: null,
     vendorId: 'vnd-globex',
@@ -129,7 +162,7 @@ export const FIXTURE_QNA: Qna[] = [
   },
   {
     id: 'qa-003',
-    grantApplicationId: 'sol-0142',
+    grantApplicationId: 'app-0142',
     question: 'What is the period of performance start date assumed for Volume III pricing?',
     answer: null,
     vendorId: 'vnd-initech',
@@ -142,7 +175,7 @@ export const FIXTURE_QNA: Qna[] = [
 export const FIXTURE_PROPOSALS: Proposal[] = [
   {
     id: 'prop-001',
-    grantApplicationId: 'sol-0142',
+    grantApplicationId: 'app-0142',
     vendorId: 'vnd-acme',
     vendorName: 'Acme Federal LLC',
     volumes: [
@@ -156,7 +189,7 @@ export const FIXTURE_PROPOSALS: Proposal[] = [
   },
   {
     id: 'prop-002',
-    grantApplicationId: 'sol-0142',
+    grantApplicationId: 'app-0142',
     vendorId: 'vnd-globex',
     vendorName: 'Globex Federal Systems',
     volumes: [
@@ -170,7 +203,7 @@ export const FIXTURE_PROPOSALS: Proposal[] = [
   },
   {
     id: 'prop-003',
-    grantApplicationId: 'sol-0142',
+    grantApplicationId: 'app-0142',
     vendorId: 'vnd-initech',
     vendorName: 'Initech Cloud Services',
     volumes: [
@@ -186,29 +219,32 @@ export const FIXTURE_PROPOSALS: Proposal[] = [
 
 export const FIXTURE_EVALUATION: PeerReview = {
   id: 'eval-0142',
-  grantApplicationId: 'sol-0142',
-  panelMembers: ['ev-allen', 'ev-mendez', 'ev-park'],
-  factors: [
-    { id: 'f-tech', name: 'Technical Approach', weight: 40, sectionM: 'M.3.1' },
-    { id: 'f-mgmt', name: 'Management Approach', weight: 25, sectionM: 'M.3.2' },
-    { id: 'f-pp', name: 'Past Performance', weight: 20, sectionM: 'M.3.3' },
-    { id: 'f-price', name: 'Price (LPTA secondary)', weight: 15, sectionM: 'M.3.4' },
+  grantApplicationId: 'app-0142',
+  panelMembers: ['rv-allen', 'rv-mendez', 'rv-park'],
+  criteria: [
+    { id: 'c-sig', name: 'Significance', weight: 40, description: 'Importance of the problem and project impact' },
+    { id: 'c-app', name: 'Approach', weight: 30, description: 'Soundness of design, methods, and work plan' },
+    { id: 'c-feas', name: 'Feasibility / Investigator', weight: 20, description: 'Capacity and qualifications to execute' },
+    { id: 'c-budget', name: 'Budget reasonableness', weight: 10, description: 'Costs allowable, allocable, reasonable (2 CFR 200 Subpart E)' },
   ],
   state: 'INDIVIDUAL_SCORING',
+  overallScore: 8.1,
+  recommendation: 'FUND_WITH_CONDITIONS',
+  conflictOfInterestAttested: true,
   ssddDocId: null,
 };
 
 export const FIXTURE_SCORES: PeerReviewScore[] = [
-  { evaluatorId: 'ev-allen', evaluatorName: 'Dr. Allen', proposalId: 'prop-001', factorId: 'f-tech', score: 9, narrative: 'Strong zero-trust pattern; FedRAMP boundary clearly drawn.', submittedAt: new Date().toISOString() },
-  { evaluatorId: 'ev-allen', evaluatorName: 'Dr. Allen', proposalId: 'prop-002', factorId: 'f-tech', score: 7, narrative: 'Acceptable approach; some risk on multi-cloud handoff.', submittedAt: new Date().toISOString() },
-  { evaluatorId: 'ev-mendez', evaluatorName: 'A. Mendez', proposalId: 'prop-001', factorId: 'f-mgmt', score: 8, narrative: 'Clear PM org chart; key-personnel commitments solid.', submittedAt: new Date().toISOString() },
-  { evaluatorId: 'ev-mendez', evaluatorName: 'A. Mendez', proposalId: 'prop-002', factorId: 'f-mgmt', score: 8, narrative: 'Comparable management; less depth on subcontractor mgmt.', submittedAt: new Date().toISOString() },
+  { reviewerId: 'rv-allen', reviewerName: 'Dr. Allen', proposalId: 'app-0142', meritCriterionId: 'c-sig', score: 9, narrative: 'Addresses a well-documented rural-health access gap.', submittedAt: new Date().toISOString() },
+  { reviewerId: 'rv-allen', reviewerName: 'Dr. Allen', proposalId: 'app-0203', meritCriterionId: 'c-sig', score: 7, narrative: 'Significant but narrower geographic impact.', submittedAt: new Date().toISOString() },
+  { reviewerId: 'rv-mendez', reviewerName: 'A. Mendez', proposalId: 'app-0142', meritCriterionId: 'c-app', score: 8, narrative: 'Clear logic model; measurable objectives and evaluation plan.', submittedAt: new Date().toISOString() },
+  { reviewerId: 'rv-mendez', reviewerName: 'A. Mendez', proposalId: 'app-0203', meritCriterionId: 'c-app', score: 8, narrative: 'Strong methodology; mentorship structure well defined.', submittedAt: new Date().toISOString() },
 ];
 
 export const FIXTURE_AWARD: Award = {
   id: 'aw-2026-001',
   peerReviewId: 'eval-0142',
-  grantApplicationId: 'sol-0142',
+  grantApplicationId: 'app-0142',
   winningVendorId: 'vnd-acme',
   winningVendorName: 'Acme Federal LLC',
   contractNumber: 'GS-35F-0001V',
@@ -285,7 +321,7 @@ export const FIXTURE_VENDORS: Vendor[] = [
 ];
 
 export const FIXTURE_AUDIT_EVENTS: AuditEvent[] = [
-  { id: 'ae-001', actorId: 'co-reeves', actorName: 'Dana Reeves', agencyId: 'GSA-FAS', action: 'SOLICITATION.PUBLISH', objectType: 'GrantApplication', objectId: 'sol-0142', correlationId: 'r-abc-001', before: { status: 'READY_TO_PUBLISH' }, after: { status: 'PUBLISHED' }, ts: new Date(Date.now() - 1000 * 60 * 60 * 24 * 7).toISOString() },
+  { id: 'ae-001', actorId: 'po-reeves', actorName: 'Dana Reeves', agencyId: 'HHS-ACF', action: 'APPLICATION.SUBMIT', objectType: 'GrantApplication', objectId: 'app-0142', correlationId: 'r-abc-001', before: { status: 'INTAKE' }, after: { status: 'SCREENING' }, ts: new Date(Date.now() - 1000 * 60 * 60 * 24 * 7).toISOString() },
   { id: 'ae-002', actorId: 'co-reeves', actorName: 'Dana Reeves', agencyId: 'GSA-FAS', action: 'AMENDMENT.ISSUE', objectType: 'Amendment', objectId: 'am-0001', correlationId: 'r-abc-002', before: null, after: { number: 1 }, ts: new Date(Date.now() - 1000 * 60 * 60 * 24 * 5).toISOString() },
   { id: 'ae-003', actorId: 'cs-ortiz', actorName: 'Miguel Ortiz', agencyId: 'GSA-FAS', action: 'QNA.ANSWER', objectType: 'Qna', objectId: 'qa-001', correlationId: 'r-def-001', before: { status: 'AWAITING_CO_APPROVAL' }, after: { status: 'PUBLISHED' }, ts: new Date(Date.now() - 1000 * 60 * 60 * 22).toISOString() },
   { id: 'ae-004', actorId: 'ssa-whitfield', actorName: 'Col. Whitfield', agencyId: 'GSA-FAS', action: 'SSDD.SIGN', objectType: 'PeerReview', objectId: 'eval-0142', correlationId: 'r-ghi-001', before: { state: 'AWAITING_SSA_SIGNATURE' }, after: { state: 'AWARDED' }, ts: new Date(Date.now() - 1000 * 60 * 60 * 24 * 30).toISOString() },

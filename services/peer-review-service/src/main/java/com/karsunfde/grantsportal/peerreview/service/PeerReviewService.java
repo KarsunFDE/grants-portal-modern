@@ -17,14 +17,15 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * Workflow 4 — peerReview → consensus → source selection → award (pre-award).
+ * Merit-review workflow — panel assignment → individual scoring → consensus →
+ * funding recommendation → award decision (2 CFR 200.205).
  *
  * Brownfield-debt items reinforced:
- *   - Item 3 — calls grant-application-service for each proposal text via
+ *   - Item 3 — calls grant-application-service for each application's text via
  *     GrantApplicationClient (no circuit breaker).
  *   - Item 2 — state transitions audit-logged via async.
- *   - Item 4 reinforcement — SSDD draft response from ai-orchestrator goes
- *     straight back; no structured-output schema enforcement.
+ *   - Item 4 reinforcement — recommendation-draft response from ai-orchestrator
+ *     goes straight back; no structured-output schema enforcement.
  */
 @Service
 public class PeerReviewService {
@@ -81,9 +82,9 @@ public class PeerReviewService {
         if (eOpt.isEmpty()) return Optional.empty();
         PeerReview e = eOpt.get();
 
-        // ⚠ Item 3 — fetches proposal context from grant-application-service for
-        // each score submission. No circuit breaker; under TEP-week load
-        // this is the thread-exhaustion reproducer.
+        // ⚠ Item 3 — fetches application context from grant-application-service
+        // for each score submission. No circuit breaker; under peak merit-review
+        // load this is the thread-exhaustion reproducer.
         Map<String, Object> proposal = grantApplicationClient.getGrantApplication(in.getProposalId());
         log.info("score submission peerReviewId={} proposalId={} proposal-loaded={}",
             peerReviewId, in.getProposalId(), proposal != null);
@@ -104,35 +105,35 @@ public class PeerReviewService {
         return Optional.of(saved);
     }
 
-    /** Aggregate panel consensus per proposal × factor. */
+    /** Aggregate panel consensus per application × merit criterion. */
     public Map<String, Map<String, Double>> consensus(String peerReviewId) {
         List<PeerReviewScore> scores = scoreRepo.findByPeerReviewId(peerReviewId);
         Map<String, List<PeerReviewScore>> byProposal = scores.stream()
             .collect(Collectors.groupingBy(PeerReviewScore::getProposalId));
         Map<String, Map<String, Double>> out = new LinkedHashMap<>();
         for (Map.Entry<String, List<PeerReviewScore>> p : byProposal.entrySet()) {
-            Map<String, Double> byFactor = p.getValue().stream()
+            Map<String, Double> byCriterion = p.getValue().stream()
                 .collect(Collectors.groupingBy(
-                    PeerReviewScore::getFactorId,
+                    PeerReviewScore::getMeritCriterionId,
                     Collectors.averagingInt(PeerReviewScore::getScore)));
-            out.put(p.getKey(), byFactor);
+            out.put(p.getKey(), byCriterion);
         }
         return out;
     }
 
-    /** Generate Source Selection Decision Document via ai-orchestrator. */
+    /** Draft a panel funding recommendation via ai-orchestrator. */
     public Optional<Map<String, Object>> draftSsdd(String peerReviewId, String actor) {
         return evalRepo.findById(peerReviewId).map(e -> {
             // ⚠ Item 4 reinforcement — raw response returned; no schema check.
             Map<String, Object> resp = aiClient.draftSsdd(peerReviewId);
-            e.setState("CONSENSUS");
+            e.setState("FUNDING_RECOMMENDATION");
             e.setConsensusAt(Instant.now());
             // Store doc id placeholder from response if present.
             if (resp != null && resp.get("clause_id") != null) {
                 e.setSsddDocId(resp.get("clause_id").toString());
             }
             evalRepo.save(e);
-            auditLogger.recordAsync("SSDD_DRAFT", "peerReview", peerReviewId,
+            auditLogger.recordAsync("RECOMMENDATION_DRAFT", "peerReview", peerReviewId,
                 actor, e.getAgencyId());
             return resp;
         });

@@ -26,6 +26,17 @@ public class GrantApplicationCreateRequest {
     private String description; // ⚠ raw HTML accepted
     private String status;
 
+    // --- Grants intake fields (SF-424 / 2 CFR 200) ---
+    private String opportunityNumber;
+    private String assistanceListingNumber;
+    private String awardingAgency;
+    private String applicantOrg;
+    private String applicantUei;
+    private String applicantType;
+    private String fundingInstrument;
+    private Double requestedAmountFederal;
+    private Double costShareMatch;
+
     // ⚠ Pair-unique debt obs-pii-in-info-logs — PI name + SSN feed the
     //   INFO-level log line in GrantApplicationService.create.
     private String principalInvestigatorName;
@@ -41,6 +52,25 @@ public class GrantApplicationCreateRequest {
     public void setDescription(String description) { this.description = description; }
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
+
+    public String getOpportunityNumber() { return opportunityNumber; }
+    public void setOpportunityNumber(String opportunityNumber) { this.opportunityNumber = opportunityNumber; }
+    public String getAssistanceListingNumber() { return assistanceListingNumber; }
+    public void setAssistanceListingNumber(String assistanceListingNumber) { this.assistanceListingNumber = assistanceListingNumber; }
+    public String getAwardingAgency() { return awardingAgency; }
+    public void setAwardingAgency(String awardingAgency) { this.awardingAgency = awardingAgency; }
+    public String getApplicantOrg() { return applicantOrg; }
+    public void setApplicantOrg(String applicantOrg) { this.applicantOrg = applicantOrg; }
+    public String getApplicantUei() { return applicantUei; }
+    public void setApplicantUei(String applicantUei) { this.applicantUei = applicantUei; }
+    public String getApplicantType() { return applicantType; }
+    public void setApplicantType(String applicantType) { this.applicantType = applicantType; }
+    public String getFundingInstrument() { return fundingInstrument; }
+    public void setFundingInstrument(String fundingInstrument) { this.fundingInstrument = fundingInstrument; }
+    public Double getRequestedAmountFederal() { return requestedAmountFederal; }
+    public void setRequestedAmountFederal(Double requestedAmountFederal) { this.requestedAmountFederal = requestedAmountFederal; }
+    public Double getCostShareMatch() { return costShareMatch; }
+    public void setCostShareMatch(Double costShareMatch) { this.costShareMatch = costShareMatch; }
 
     public String getPrincipalInvestigatorName() { return principalInvestigatorName; }
     public void setPrincipalInvestigatorName(String principalInvestigatorName) {

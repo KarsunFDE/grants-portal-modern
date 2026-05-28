@@ -6,12 +6,12 @@ import { GrantApplication } from '../../models/grant-application';
 import { FIXTURE_SOLICITATIONS } from '../../services/mock-fixtures';
 
 /**
- * Pre-publication editor for a draft GrantApplication.
+ * Pre-submission editor for a draft grant application.
  *
- * Includes a side-panel clause-library lookup (RAG over FAR/DFARS),
- * which is the W2 anchor surface (hybrid lexical + vector). The
- * search input here is the W2 Wed retrieval-boundary work surface
- * — must filter by agency_id (Item 10).
+ * Includes a side-panel Uniform-Guidance lookup (RAG over 2 CFR 200 / 45 CFR 75),
+ * which is the W2 anchor surface (hybrid lexical + vector). The search input
+ * here is the W2 Wed retrieval-boundary work surface — must filter by
+ * agency_id (Item 10).
  */
 @Component({
   selector: 'app-grant-application-editor',
@@ -20,43 +20,43 @@ import { FIXTURE_SOLICITATIONS } from '../../services/mock-fixtures';
   template: `
     <div class="page-header">
       <div>
-        <h2>{{ grantApplication?.title || 'Draft grantApplication' }}</h2>
+        <h2>{{ grantApplication?.title || 'Draft grant application' }}</h2>
         <div class="subtitle">
-          <span class="badge" [ngClass]="(grantApplication?.status || 'draft').toLowerCase()">{{ grantApplication?.status }}</span>
-          · NAICS {{ grantApplication?.naics }} · {{ grantApplication?.contractType }}
+          <span class="badge" [ngClass]="(grantApplication?.status || 'intake').toLowerCase()">{{ grantApplication?.status }}</span>
+          · ALN {{ grantApplication?.assistanceListingNumber }} · {{ grantApplication?.fundingInstrument }}
         </div>
       </div>
       <div>
-        <a [routerLink]="['/grant-applications', id, 'amendments']"><button class="secondary">Amendments</button></a>
-        <a [routerLink]="['/grant-applications', id, 'qa']"><button class="secondary">Q&amp;A triage</button></a>
-        <a [routerLink]="['/grant-applications', id, 'proposals']"><button class="secondary">Proposals</button></a>
+        <a [routerLink]="['/grant-applications', id, 'amendments']"><button class="secondary">NOFO amendments</button></a>
+        <a [routerLink]="['/grant-applications', id, 'qa']"><button class="secondary">Applicant Q&amp;A</button></a>
+        <a [routerLink]="['/grant-applications', id, 'proposals']"><button class="secondary">Applications</button></a>
       </div>
     </div>
 
     <div class="two-col">
       <div>
         <div class="card">
-          <h3>Section C — Statement of Work</h3>
+          <h3>Project Narrative</h3>
           <textarea rows="8" [(ngModel)]="sectionC"></textarea>
         </div>
         <div class="card">
-          <h3>Section L — Instructions to Offerors</h3>
+          <h3>Budget Narrative</h3>
           <textarea rows="8" [(ngModel)]="sectionL"></textarea>
         </div>
         <div class="card">
-          <h3>Section M — PeerReview Factors</h3>
+          <h3>Merit-review criteria addressed</h3>
           <textarea rows="6" [(ngModel)]="sectionM"></textarea>
         </div>
       </div>
 
       <div>
         <div class="card">
-          <h3>Clause library (RAG)</h3>
+          <h3>Uniform Guidance lookup (RAG)</h3>
           <p style="font-size:0.8rem;color:var(--color-fg-muted)">
-            Hybrid lexical + Atlas Vector Search over FAR/DFARS.
+            Hybrid lexical + Atlas Vector Search over 2 CFR 200 / 45 CFR 75.
             <em>Filtered by agency_id — Item 10 surface.</em>
           </p>
-          <input [(ngModel)]="clauseQuery" (keyup.enter)="searchClauses()" placeholder="e.g., 52.212-4 commercial items"/>
+          <input [(ngModel)]="clauseQuery" (keyup.enter)="searchClauses()" placeholder="e.g., 200.430 allowable costs"/>
           <button (click)="searchClauses()" style="margin-top:0.5rem">Search</button>
           <ul *ngIf="clauseResults.length > 0">
             <li *ngFor="let c of clauseResults">
@@ -69,11 +69,11 @@ import { FIXTURE_SOLICITATIONS } from '../../services/mock-fixtures';
         <div class="card">
           <h3>State transition</h3>
           <select [(ngModel)]="targetState">
-            <option value="DRAFT">DRAFT</option>
-            <option value="INTERNAL_REVIEW">INTERNAL_REVIEW</option>
-            <option value="READY_TO_PUBLISH">READY_TO_PUBLISH</option>
-            <option value="PUBLISHED">PUBLISHED (CO only)</option>
-            <option value="CANCELLED">CANCELLED</option>
+            <option value="INTAKE">INTAKE</option>
+            <option value="SCREENING">SCREENING</option>
+            <option value="PEER_REVIEW">PEER_REVIEW</option>
+            <option value="AWARD_DECISION">AWARD_DECISION (Selecting Official)</option>
+            <option value="WITHDRAWN">WITHDRAWN</option>
           </select>
           <button style="margin-top:0.5rem">Transition</button>
           <p style="font-size:0.75rem;color:var(--color-fg-muted);margin-top:0.5rem">
@@ -92,7 +92,7 @@ export class GrantApplicationEditorComponent implements OnInit {
   sectionM = '';
   clauseQuery = '';
   clauseResults: { id: string; title: string }[] = [];
-  targetState = 'INTERNAL_REVIEW';
+  targetState = 'SCREENING';
 
   constructor(private route: ActivatedRoute) {}
 
@@ -100,18 +100,21 @@ export class GrantApplicationEditorComponent implements OnInit {
     this.id = this.route.snapshot.params['id'];
     this.grantApplication = FIXTURE_SOLICITATIONS.find((s) => s.id === this.id)
       ?? FIXTURE_SOLICITATIONS[0];
-    this.sectionC = `C.1 SCOPE. ${this.grantApplication.description}`;
-    this.sectionL = 'L.5.2 Volume I (Technical) — 60 pages…';
-    this.sectionM = 'M.3.1 Technical Approach (40%)\nM.3.2 Management Approach (25%)\nM.3.3 Past Performance (20%)\nM.3.4 Price (15%)';
+    this.sectionC = this.grantApplication.sections?.projectNarrative
+      ?? `1. SIGNIFICANCE. ${this.grantApplication.description}`;
+    this.sectionL = this.grantApplication.sections?.budgetNarrative
+      ?? 'Personnel and fringe (Subpart E)…';
+    this.sectionM = this.grantApplication.sections?.meritCriteria
+      ?? 'Significance (40%)\nApproach (30%)\nFeasibility / Investigator (20%)\nBudget reasonableness (10%)';
   }
 
   searchClauses(): void {
-    // Stub — in W2, hits POST /rag/clause-search.
+    // Stub — in W2, hits POST /rag/clause-search over 2 CFR 200 / 45 CFR 75.
     const q = this.clauseQuery.toLowerCase();
     this.clauseResults = [
-      { id: '52.212-4', title: 'Contract Terms and Conditions—Commercial Items' },
-      { id: '52.204-21', title: 'Basic Safeguarding of Covered Contractor Information Systems' },
-      { id: '52.219-14', title: 'Limitations on Subcontracting' },
-    ].filter((c) => !q || c.id.includes(q) || c.title.toLowerCase().includes(q));
+      { id: '2 CFR 200.204', title: 'Notices of funding opportunity' },
+      { id: '2 CFR 200.205', title: 'Federal awarding agency review of merit of proposals' },
+      { id: '2 CFR 200.430', title: 'Compensation — personal services (allowable costs)' },
+    ].filter((c) => !q || c.id.toLowerCase().includes(q) || c.title.toLowerCase().includes(q));
   }
 }
