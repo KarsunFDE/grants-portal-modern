@@ -2,13 +2,13 @@ import { Injectable } from '@angular/core';
 import { BehaviorSubject, Observable } from 'rxjs';
 import { Role, RoleProfile, ROLE_PROFILES } from '../models/roles';
 
-const STORAGE_KEY = 'acquire-gov:active-role';
+const STORAGE_KEY = 'grants-portal-modern:active-role';
 
 /**
  * Mock role-switcher.
  *
  * Production resolves role from validated JWT (`role` claim) in the
- * API gateway. acquire-gov main currently has Debt Item 1 (JWT
+ * API gateway. grants-portal-modern main currently has Debt Item 1 (JWT
  * signature-skip on `/api/public/*`) — the cohort discovers and fixes
  * this in W4 Wed (OWASP LLM07/LLM08).
  *

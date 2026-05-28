@@ -1,7 +1,7 @@
 /**
  * Instructor-demo fixtures.
  *
- * The acquire-gov backend endpoints listed in feature-inventory-target.md
+ * The grants-portal-modern backend endpoints listed in feature-inventory-target.md
  * are scaffold-level; many return empty or 404 against the current
  * legacy stack. To keep instructor-driven demos showing realistic
  * federal-acquisitions data even without a fully populated DB, every
@@ -295,7 +295,7 @@ export const FIXTURE_FINDINGS: Finding[] = [
   {
     id: 'F-2026-0007',
     scope: 'PLATFORM',
-    scopeId: 'acquire-gov',
+    scopeId: 'grants-portal-modern',
     title: 'CI lint workflow disabled — repo-self finding',
     findingType: 'CA-7 continuous monitoring',
     severity: 'MODERATE',

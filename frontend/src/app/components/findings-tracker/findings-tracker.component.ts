@@ -11,7 +11,7 @@ import { FIXTURE_FINDINGS } from '../../services/mock-fixtures';
  * due dates. Meta-mirror of W6 Client Deliverability per
  * feature-inventory-target.md line 391-394: the cohort's runbook +
  * ADR catalog + eval report are themselves modeled as Findings
- * against acquire-gov (incl. Item 12 — repo's own lint debt).
+ * against grants-portal-modern (incl. Item 12 — repo's own lint debt).
  *
  * Realism: mirrors GSA OIG A210064 Contract Administration Audit pattern.
  */
@@ -38,7 +38,7 @@ import { FIXTURE_FINDINGS } from '../../services/mock-fixtures';
           <select [(ngModel)]="draft.scope">
             <option value="CONTRACT">Contract</option>
             <option value="VENDOR">Vendor</option>
-            <option value="PLATFORM">Platform (acquire-gov)</option>
+            <option value="PLATFORM">Platform (grants-portal-modern)</option>
           </select>
         </label>
         <label><span class="label-text">Scope ID</span>
@@ -109,7 +109,7 @@ export class FindingsTrackerComponent implements OnInit {
   draft: Partial<Finding> = {
     title: '',
     scope: 'PLATFORM',
-    scopeId: 'acquire-gov',
+    scopeId: 'grants-portal-modern',
     severity: 'MODERATE',
     findingType: '',
     description: '',
@@ -127,7 +127,7 @@ export class FindingsTrackerComponent implements OnInit {
     const f: Finding = {
       id: `F-${new Date().getFullYear()}-${String(this.findings.length + 1).padStart(4, '0')}`,
       scope: this.draft.scope ?? 'PLATFORM',
-      scopeId: this.draft.scopeId ?? 'acquire-gov',
+      scopeId: this.draft.scopeId ?? 'grants-portal-modern',
       title: this.draft.title ?? '',
       findingType: this.draft.findingType ?? '',
       severity: this.draft.severity ?? 'MODERATE',

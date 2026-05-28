@@ -3,7 +3,7 @@
   "version": 1,
   "newProjectRoot": "projects",
   "projects": {
-    "acquire-gov-frontend": {
+    "grants-portal-modern-frontend": {
       "projectType": "application",
       "schematics": {},
       "root": "",
@@ -13,7 +13,7 @@
         "build": {
           "builder": "@angular-devkit/build-angular:application",
           "options": {
-            "outputPath": "dist/acquire-gov-frontend",
+            "outputPath": "dist/grants-portal-modern-frontend",
             "index": "src/index.html",
             "browser": "src/main.ts",
             "polyfills": ["zone.js"],
@@ -45,10 +45,10 @@
           "builder": "@angular-devkit/build-angular:dev-server",
           "configurations": {
             "production": {
-              "buildTarget": "acquire-gov-frontend:build:production"
+              "buildTarget": "grants-portal-modern-frontend:build:production"
             },
             "development": {
-              "buildTarget": "acquire-gov-frontend:build:development"
+              "buildTarget": "grants-portal-modern-frontend:build:development"
             }
           },
           "defaultConfiguration": "development"
