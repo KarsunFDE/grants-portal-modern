@@ -20,4 +20,6 @@ HITL Workflow:
 4) Peer Review
 5) Factor Suggest (Human Gate)
 6) Submit Draft
+7) Award
 
+Prompt
