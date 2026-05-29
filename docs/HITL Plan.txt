@@ -1,0 +1,23 @@
+HITL Plan
+
+Main Steps:
+
+1)Grant Application Initiated
+2)Check Eligibility (HITL gate placed here)
+3)Answer Q-A
+4)Factor Suggest (HITL Gated)
+5)Peer Review
+6)Draft Amendment
+
+Triggers for Human Intervention:
+1) Grant Application draft eligibility
+2) Factor Suggest
+
+HITL Workflow:
+1) Grant Application initiated
+2) Human gate to check eligibility details and evaluate
+3) Answer QA
+4) Peer Review
+5) Factor Suggest (Human Gate)
+6) Submit Draft
+
