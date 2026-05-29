@@ -22,4 +22,21 @@ HITL Workflow:
 6) Submit Draft
 7) Award
 
-Prompt
+Initial Prompt Structure:
+We're working to pilot an AI orchestration feature for our contracting officers to award grants. We have some stubbed & old impls, but we need to have a reachable endpoint to draft a basic version of a solicitation by tomorrow afternoon. We need to focus on the requiresment from our <prd>@docs/prd/phase-1-ai-adoption.md</prd> should be oriented around our first feasible pilot of a basic AWS bedrock invocation to draft a solicitation. We need to /plan how we can acheive a simple solution by tomorrow afternoon.
+
+  Guidelines:
+  
+We only need a simple, nothing grounded in truth just yet, draft grant application to prove a concept of AI draftability for these grants.
+As we plan, we need to assure we have testing in place to verify, before we EVER hit the actual AWS Bedrock endpoint, we need to have passing tests to assure us of our retry policies. NEVER try to hit the AWS Bedrock endpoint, we will explicitly tell you once we've loaded that .env with our bearer token for bedrock.
+We are generating a planning spec with in our @docs/adrs
+Think & ask questions of me that we may not have considered with this requirement.
+
+  Considerations we've discussed:
+  <team-considerations>What model? cheapest, sonnet, absolutely no reason for opus
+  What's the cost? Sonnet $3 I/ $15 O
+  Provider? AWS Bedrock for model transference & gov FedRAMP
+  Streaming for all draft knowledge to resiliency
+  Do we always retry? Set number max retries & backoff (1s, 5s, 10s, 30s, 60s -- jitter), specific status codes
+  API_KEY request limits? Consider how we handle a user base that scales to 10,000 users with our single api_key Do we need more?
+  Outstanding Issues?</team-considerations>
