@@ -23,7 +23,7 @@ HITL Workflow:
 7) Award
 
 Initial Prompt Structure:
-We're working to pilot an AI orchestration feature for our contracting officers to award grants. We have some stubbed & old impls, but we need to have a reachable endpoint to draft a basic version of a solicitation by tomorrow afternoon. We need to focus on the requiresment from our <prd>@docs/prd/phase-1-ai-adoption.md</prd> should be oriented around our first feasible pilot of a basic AWS bedrock invocation to draft a solicitation. We need to /plan how we can acheive a simple solution by tomorrow afternoon.
+We're working to pilot an AI orchestration feature for our contracting officers to award grants. We need to have a reachable endpoint to draft a basic version of a grant. We need to plan how we can achieve a simple solution.
 
   Guidelines:
   
