@@ -11,7 +11,7 @@ We use human approval at key risk points.
 Gate 1: Eligibility and Risk Review
 	Stage: Screening
 	Owner: Grants Officer or Program Officer
-	Input: Application data, eligibility checks, risk flags, AI recommendation
+	Input: Application data, eligibility checks, risk flags, AI recommendation, retrieved_sources, citation_refs, confidence_score, grounding_status
 	Allowed decisions:
 		- Approve to move forward
 		- Return for fixes
@@ -31,7 +31,7 @@ Gate 2: Conflict of Interest (COI)
 Gate 3: Factor Suggest Acceptance
 	Stage: Peer Review
 	Owner: Human reviewer
-	Input: AI factor suggestion output
+	Input: AI factor suggestion output, retrieved_sources, citation_refs, confidence_score, grounding_status
 	Allowed decisions:
 		- Accept
 		- Edit
@@ -41,7 +41,7 @@ Gate 3: Factor Suggest Acceptance
 Gate 4: Award Decision
 	Stage: Award
 	Owner: Grants Officer
-	Input: Peer review results, recommendation package, AI-assisted summaries
+	Input: Peer review results, recommendation package, AI-assisted summaries, retrieved_sources, citation_refs, confidence_score, grounding_status
 	Allowed decisions:
 		- Award
 		- Do not award
@@ -54,8 +54,32 @@ For regulatory or policy answers:
 - AI must reference real sources: 2 CFR 200, 45 CFR 75, and NOFO content.
 - If output is low-confidence, missing citations, or ungrounded:
 	- Block output
-	- Escalate to human review
+	- Escalate to human review through a named gate
 - Rule: Ungrounded regulatory guidance is never directly shipped.
+
+Grounding Escalation Routing:
+- Screening grounding failures route to Gate 1 owner.
+- COI-related retrieval issues route to Gate 2 owner.
+- Factor suggestion grounding failures route to Gate 3 owner.
+- Award package grounding failures route to Gate 4 owner.
+- Rule: No silent retries for blocked grounding cases. Every escalation creates a gate decision record with gate_id and owner.
+
+Retrieval Invalidation Policy:
+Re-retrieval is required before the next gate decision when any of the following change:
+- Application data
+- NOFO or amendment content
+- Policy corpus version
+- Reviewer assignments or COI state
+- Award package content
+- Rule: Prior evidence cannot be reused after invalidation.
+
+Tenant Binding Invariant:
+- Every evidence_ref must carry the same authority-derived tenant_id as the gate decision tenant_id.
+- Rule: A gate decision is invalid if any evidence_ref tenant_id differs from decision tenant_id.
+
+Cache Revalidation Policy:
+- Cache hits are allowed only if they pass citation, confidence, freshness, and tenant checks immediately before generation and gate input.
+- Rule: If any cache check fails, block cached output and escalate to the gate owner.
 
 Audit and Durability Requirements:
 Every gate decision must be logged in an append-only trail:
@@ -71,6 +95,10 @@ Every gate decision must be logged in an append-only trail:
  - rationale
  - override_flag
  - evidence_refs
+ - retrieved_sources
+ - citation_refs
+ - confidence_score
+ - grounding_status
 
 System requirements:
 
@@ -98,22 +126,22 @@ Acceptance Criteria
 Retrieval Planning:
 
 Goal:
-Design a retrieval strategy for out grants application that:
+Design a retrieval strategy for our grants application that:
 	- Grounds AI outputs in domain sources
-	- Use ONLY AWS Bedrock models for complaiance reasons
-	- Minimizie token usage and model spend
-	- Escalates low-confidence cases to HITL instead of consistent retries
+	- Use ONLY AWS Bedrock models for compliance reasons
+	- Minimize token usage and model spend
+	- Escalate low-confidence cases to HITL instead of repeated retries
 	
 Architecture:
-We need langchain v1.0 inside of our system, this moves away from LCEL, Runnables & Chains. Please ground all truth behind langchain v1.0 through documentation ONLY. Never use public facing resources from the wider community.
-We currently use a MongoDB with seed data, we need to address this by also include MongoDB Atlas for Vector DB capabilities. We need to roll our MongoDB container into a local MongoDB Atlas container to support both databse usage & vector db.
-We need to consider what size & embedding model we leverage for our MongoDB atlas container. WE need to make sure, these models exist & can be leveraged through Bedrock without and major additional steps or deployments. Should be usable just with an API Key. Consider lower cost as an Ideal solution.
+We need LangChain v1.0 inside of our system. Please ground all implementation truth behind LangChain v1.0 through official documentation only.
+We currently use MongoDB with seed data. We need to include MongoDB Atlas for vector database capabilities and maintain application data continuity during migration.
+We need to consider what embedding model and index sizing we leverage for Atlas. We must confirm model availability through Bedrock and keep costs low.
 
 Guidelines:
 Keep additional costs to a minimum, we are working on a hairpin budget.
-We must use models within the AWS Bedrock workspace, wing new, it should be queriable through AWS Bearer Tokens.
+We must use models within the AWS Bedrock workspace. Access should be queried through AWS bearer-token or IAM-based auth flows.
 Make sure to have a rollover plan for our MongoDB > MongoDB Atlas for storage of our database & documents for retrieval. It supports both systems. We don't want to lose information during this migration step.
-We must confirm everything through our plan & address Astions with a back & forth question-answer style.
+We must confirm everything through our plan and address actions with a back-and-forth question-answer style.
 We should focus on using established software, packages & tooling, don't opt to homegrow our own implementation just because we can. Require approval for anything where we NEED custom implementation.
 Perform some additional research to ensure we've covered our basis for any considerations & questions we continue to have. We may have missed some key information for our system.
 
@@ -147,18 +175,25 @@ Primary sources:
  - Approved historical Q&A (tenant-scoped).
 
 Considerations/Questions:
-How are we to secure this applications RAG documents? Sal govt information.
-What type of retrieval patterns will best support our particular use case(s)? We have a few different parts that may need differen types of retrievals. Such as, dense, sparse or hybrid.,
+How are we to secure this application's RAG documents and sensitive government information?
+What type of retrieval patterns will best support our particular use case(s)? We have a few different parts that may need different retrieval types, such as dense, sparse, or hybrid.
 What are some of the best re-ranking strategies for retrieval?,
-How do we handle RAG observability for requiests?,
-What anti-patterns exists that we should consider.,
-What's RAGAS? How do we collect metrics for evalaution,
+How do we handle RAG observability for requests?,
+What anti-patterns exist that we should consider?,
+What's RAGAS? How do we collect metrics for evaluation?,
 What's LLM-as-a-judge for retrieval?,
 How do we appropriately manage the index?,
 What do we do during any failure points with retrieval?,
 How do we manage multi-tenant retrieval processes?,
-We need to make sure we ground all of our retrieval inggging. This way they now how things were constructed andwho done it.,
-How do we chunk all of our documentation? What should,
+We need to make sure we ground all of our retrieval logging. This way they know how things were constructed and who did it.
+How do we chunk all of our documentation? What should the chunking strategy be?,
 Is there any consideration to Caching retrieval at startup?,
 HITL stages for RAG.,
 What tools exists from langchain v1.0 that support our systems so we don't have to re-invent the wheel.
+
+Additional Acceptance Criteria:
+- Ungrounded items cannot be admitted as Gate 1, Gate 3, or Gate 4 input.
+- Every grounding escalation records gate_id, owner decision, and rationale.
+- Re-retrieval is mandatory after retrieval invalidation triggers.
+- Evidence_ref tenant_id must equal gate decision tenant_id.
+- Cache hits must pass citation, confidence, freshness, and tenant revalidation checks before generation or gate input.
