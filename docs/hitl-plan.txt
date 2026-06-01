@@ -1,42 +1,94 @@
-HITL Plan
+Workflow:
+1. Intake
+2. Screening
+3. Peer Review
+4. Award
 
-Main Steps:
+HITL Gates:
 
-1)Grant Application Initiated
-2)Check Eligibility (HITL gate placed here)
-3)Answer Q-A
-4)Factor Suggest (HITL Gated)
-5)Peer Review
-6)Draft Amendment
+We use human approval at key risk points.
 
-Triggers for Human Intervention:
-1) Grant Application draft eligibility
-2) Factor Suggest
+Gate 1: Eligibility and Risk Review
+	Stage: Screening
+	Owner: Grants Officer or Program Officer
+	Input: Application data, eligibility checks, risk flags, AI recommendation
+	Allowed decisions:
+		- Approve to move forward
+		- Return for fixes
+		- Reject
+ - Rule: No application can move past Screening without a human decision and rationale.
+ 
+Gate 2: Conflict of Interest (COI)
+	Stage: Peer Review
+	Owner: Review Lead
+	Input: Reviewer assignments, COI flags, reviewer disclosures
+	Allowed decisions:
+		- Resolve and continue
+		- Remove reviewer and reassign
+		- Override with written rationale
+ - Rule: No scoring starts until COI is resolved by a human.
+ 
+Gate 3: Factor Suggest Acceptance
+	Stage: Peer Review
+	Owner: Human reviewer
+	Input: AI factor suggestion output
+	Allowed decisions:
+		- Accept
+		- Edit
+		- Reject
+ - Rule: AI suggestions are assistive only and require human acceptance before use in scoring narrative.
+ 
+Gate 4: Award Decision
+	Stage: Award
+	Owner: Grants Officer
+	Input: Peer review results, recommendation package, AI-assisted summaries
+	Allowed decisions:
+		- Award
+		- Do not award
+		- Return to review
+- Rule: No unattended award path exists. Award must have a persisted human approval record and rationale.
 
-HITL Workflow:
-1) Grant Application initiated
-2) Human gate to check eligibility details and evaluate
-3) Answer QA
-4) Peer Review
-5) Factor Suggest (Human Gate)
-6) Submit Draft
-7) Award
+Grounding Policy:
+For regulatory or policy answers:
 
-Initial Prompt Structure:
-We're working to pilot an AI orchestration feature for our contracting officers to award grants. We need to have a reachable endpoint to draft a basic version of a grant. We need to plan how we can achieve a simple solution.
+- AI must reference real sources: 2 CFR 200, 45 CFR 75, and NOFO content.
+- If output is low-confidence, missing citations, or ungrounded:
+	- Block output
+	- Escalate to human review
+- Rule: Ungrounded regulatory guidance is never directly shipped.
 
-  Guidelines:
-  
-We only need a simple, nothing grounded in truth just yet, draft grant application to prove a concept of AI draftability for these grants.
-As we plan, we need to assure we have testing in place to verify, before we EVER hit the actual AWS Bedrock endpoint, we need to have passing tests to assure us of our retry policies. NEVER try to hit the AWS Bedrock endpoint, we will explicitly tell you once we've loaded that .env with our bearer token for bedrock.
-We are generating a planning spec with in our @docs/adrs
-Think & ask questions of me that we may not have considered with this requirement.
+Audit and Durability Requirements:
+Every gate decision must be logged in an append-only trail:
 
-  Considerations we've discussed:
-  <team-considerations>What model? cheapest, sonnet, absolutely no reason for opus
-  What's the cost? Sonnet $3 I/ $15 O
-  Provider? AWS Bedrock for model transference & gov FedRAMP
-  Streaming for all draft knowledge to resiliency
-  Do we always retry? Set number max retries & backoff (1s, 5s, 10s, 30s, 60s -- jitter), specific status codes
-  API_KEY request limits? Consider how we handle a user base that scales to 10,000 users with our single api_key Do we need more?
-  Outstanding Issues?</team-considerations>
+ - actor_id
+ - actor_role
+ - tenant_id
+ - timestamp
+ - workflow_stage
+ - gate_id
+ - ai_run_id
+ - decision
+ - rationale
+ - override_flag
+ - evidence_refs
+
+System requirements:
+
+ - Logs survive restart
+ - Logs support multi-day pause and resume
+ - OIG can reconstruct decisions from logs alone
+ - No cross-tenant data leakage
+ 
+Correct Regulatory Mapping
+ - 2 CFR 200.205 = merit review
+ - 2 CFR 200.206 = risk review
+ 
+Acceptance Criteria
+1. Award cannot be completed without human approval record.
+2. Screening cannot advance without Gate 1 decision.
+3. Peer review scoring is blocked until COI gate is resolved.
+4. Factor Suggest output cannot be used until human acceptance.
+5. Ungrounded regulatory output is blocked and escalated.
+6. Audit trail captures all required gate fields.
+7. Audit trail is durable across restart and pause.
+8. Tenant boundaries are enforced in logs and gate evidence
