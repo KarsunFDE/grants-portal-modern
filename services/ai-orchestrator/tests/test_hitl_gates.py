@@ -194,6 +194,7 @@ class TestGate3FactorSuggest:
         """Gate 3 rule: AI suggestions are assistive only — always requires_human_review."""
         resp = client.post("/eval/factor-suggest", json={
             "topic": "merit criterion technical approach",
+            "tenant_id": "tenant-abc",
         })
         assert resp.status_code == 200
         body = resp.json()
@@ -258,6 +259,7 @@ class TestGate4AwardDecision:
         """Gate 4: no unattended award path."""
         resp = client.post("/eval/ssdd-draft", json={
             "topic": "award recommendation for proposal XYZ",
+            "tenant_id": "tenant-abc",
         })
         assert resp.status_code == 200
         body = resp.json()

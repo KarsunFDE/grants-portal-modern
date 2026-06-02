@@ -175,14 +175,14 @@ class TestGroundingEnforcementEndpoints:
         assert isinstance(body.get("citations"), list) or body.get("escalation_id") is not None
 
     def test_factor_suggest_returns_grounding_fields(self, client):
-        resp = client.post("/eval/factor-suggest", json={"topic": "technical approach"})
+        resp = client.post("/eval/factor-suggest", json={"topic": "technical approach", "tenant_id": "tenant-abc"})
         assert resp.status_code == 200
         body = resp.json()
         assert "grounding_status" in body
         assert body["hitl_gate"] == "GATE_3"
 
     def test_ssdd_draft_returns_grounding_fields(self, client):
-        resp = client.post("/eval/ssdd-draft", json={"topic": "funding recommendation"})
+        resp = client.post("/eval/ssdd-draft", json={"topic": "funding recommendation", "tenant_id": "tenant-abc"})
         assert resp.status_code == 200
         body = resp.json()
         assert "grounding_status" in body

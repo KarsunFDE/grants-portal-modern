@@ -108,6 +108,14 @@ class ClauseSearchRequest(BaseModel):
 class FactorSuggestRequest(BaseModel):
     """Merit-criterion review-narrative suggestion. ⚠ Item 4 — no Field."""
     topic: str
+    tenant_id: str
+    constraints: str | None = None
+
+
+class SSDDDraftRequest(BaseModel):
+    """Award package / SSDD draft request — tenant_id required for Gate 4 tenant binding."""
+    topic: str
+    tenant_id: str
     constraints: str | None = None
 
 
@@ -223,8 +231,8 @@ def check_eligibility(req: EligibilityCheckRequest) -> dict[str, Any]:
             grounding_status = GroundingStatus.UNGROUNDED
 
     # Block ungrounded regulatory guidance (hitl-plan.txt §Grounding Policy)
+    ai_run_id = str(uuid.uuid4())
     if not is_grounded(grounding_status):
-        ai_run_id = str(uuid.uuid4())
         escalation = gate_enforcer.create_escalation(
             gate_id=GateId.GATE_1,
             tenant_id=req.tenant_id,
@@ -248,6 +256,7 @@ def check_eligibility(req: EligibilityCheckRequest) -> dict[str, Any]:
             "retrieved_sources": [c.source_id for c in citations],
             "citation_refs": [f"{c.regulation}:{c.section}" for c in citations],
             "escalation_id": escalation.escalation_id,
+            "ai_run_id": ai_run_id,
             "model": BEDROCK_MODEL_ID,
         }
 
@@ -279,6 +288,7 @@ def check_eligibility(req: EligibilityCheckRequest) -> dict[str, Any]:
         "retrieved_sources": [c.source_id for c in citations],
         "citation_refs": [f"{c.regulation}:{c.section}" for c in citations],
         "citations": [c.model_dump() for c in citations],
+        "ai_run_id": ai_run_id,
         "model": BEDROCK_MODEL_ID,
     }
 
@@ -380,7 +390,7 @@ def eval_factor_suggest(req: FactorSuggestRequest) -> dict[str, Any]:
     # Grounded retrieval — 2 CFR 200.204/205 required before factor suggestion (Gate 3)
     citations, confidence, faithfulness, retrieved_at = retrieval_service.retrieve(
         query=f"evaluation factor merit criterion {req.topic}",
-        tenant_id="global",
+        tenant_id=req.tenant_id,
     )
     grounding_status, human_review_reasons = compute_grounding_status(citations, confidence, faithfulness)
 
@@ -390,7 +400,7 @@ def eval_factor_suggest(req: FactorSuggestRequest) -> dict[str, Any]:
         confidence_score=confidence,
         faithfulness_score=faithfulness,
         cache_created_at=retrieved_at,
-        tenant_id="global",
+        tenant_id=req.tenant_id,
     )
     if not cache_ok:
         for r in cache_reasons:
@@ -399,11 +409,11 @@ def eval_factor_suggest(req: FactorSuggestRequest) -> dict[str, Any]:
         if is_grounded(grounding_status):
             grounding_status = GroundingStatus.UNGROUNDED
 
+    ai_run_id = str(uuid.uuid4())
     if not is_grounded(grounding_status):
-        ai_run_id = str(uuid.uuid4())
         escalation = gate_enforcer.create_escalation(
             gate_id=GateId.GATE_3,
-            tenant_id="global",
+            tenant_id=req.tenant_id,
             ai_run_id=ai_run_id,
             human_review_reasons=human_review_reasons,
             grounding_status=grounding_status,
@@ -421,6 +431,7 @@ def eval_factor_suggest(req: FactorSuggestRequest) -> dict[str, Any]:
             "retrieved_sources": [c.source_id for c in citations],
             "citation_refs": [f"{c.regulation}:{c.section}" for c in citations],
             "escalation_id": escalation.escalation_id,
+            "ai_run_id": ai_run_id,
             "model": BEDROCK_MODEL_ID,
         }
 
@@ -443,12 +454,13 @@ def eval_factor_suggest(req: FactorSuggestRequest) -> dict[str, Any]:
         "retrieved_sources": [c.source_id for c in citations],
         "citation_refs": [f"{c.regulation}:{c.section}" for c in citations],
         "citations": [c.model_dump() for c in citations],
+        "ai_run_id": ai_run_id,
         "model": BEDROCK_MODEL_ID,
     }
 
 
 @app.post("/eval/ssdd-draft")
-def eval_ssdd_draft(req: DraftRequest) -> dict[str, Any]:
+def eval_ssdd_draft(req: SSDDDraftRequest) -> dict[str, Any]:
     """
     Source Selection Decision Document tradeoff narrative drafting.
     SSA-gated (FAR 15.308 — non-delegable).
@@ -463,7 +475,7 @@ def eval_ssdd_draft(req: DraftRequest) -> dict[str, Any]:
     # Grounded retrieval — 2 CFR 200.205/212 required before award package (Gate 4)
     citations, confidence, faithfulness, retrieved_at = retrieval_service.retrieve(
         query=f"award decision funding recommendation {req.topic}",
-        tenant_id="global",
+        tenant_id=req.tenant_id,
     )
     grounding_status, human_review_reasons = compute_grounding_status(citations, confidence, faithfulness)
 
@@ -473,7 +485,7 @@ def eval_ssdd_draft(req: DraftRequest) -> dict[str, Any]:
         confidence_score=confidence,
         faithfulness_score=faithfulness,
         cache_created_at=retrieved_at,
-        tenant_id="global",
+        tenant_id=req.tenant_id,
     )
     if not cache_ok:
         for r in cache_reasons:
@@ -482,11 +494,11 @@ def eval_ssdd_draft(req: DraftRequest) -> dict[str, Any]:
         if is_grounded(grounding_status):
             grounding_status = GroundingStatus.UNGROUNDED
 
+    ai_run_id = str(uuid.uuid4())
     if not is_grounded(grounding_status):
-        ai_run_id = str(uuid.uuid4())
         escalation = gate_enforcer.create_escalation(
             gate_id=GateId.GATE_4,
-            tenant_id="global",
+            tenant_id=req.tenant_id,
             ai_run_id=ai_run_id,
             human_review_reasons=human_review_reasons,
             grounding_status=grounding_status,
@@ -505,6 +517,7 @@ def eval_ssdd_draft(req: DraftRequest) -> dict[str, Any]:
             "retrieved_sources": [c.source_id for c in citations],
             "citation_refs": [f"{c.regulation}:{c.section}" for c in citations],
             "escalation_id": escalation.escalation_id,
+            "ai_run_id": ai_run_id,
             "model": BEDROCK_MODEL_ID,
         }
 
@@ -528,6 +541,7 @@ def eval_ssdd_draft(req: DraftRequest) -> dict[str, Any]:
         "retrieved_sources": [c.source_id for c in citations],
         "citation_refs": [f"{c.regulation}:{c.section}" for c in citations],
         "citations": [c.model_dump() for c in citations],
+        "ai_run_id": ai_run_id,
         "model": BEDROCK_MODEL_ID,
     }
 
