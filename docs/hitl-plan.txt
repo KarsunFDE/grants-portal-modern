@@ -190,6 +190,8 @@ How do we chunk all of our documentation? What should the chunking strategy be?,
 Is there any consideration to Caching retrieval at startup?,
 HITL stages for RAG.,
 What tools exists from langchain v1.0 that support our systems so we don't have to re-invent the wheel.
+Ensure the metadata persists across the entire request end to end
+Ensure that we’re returning everything relevant in the JSON such as answer, citations (which may include chunk_id, source_id, last_revised, section etc., as welll as a flag that checks if it needs human review when citations conflict, retrieval confidence is low, FAR and DFAR disagree, faithfulness score is low.
 
 Additional Acceptance Criteria:
 - Ungrounded items cannot be admitted as Gate 1, Gate 3, or Gate 4 input.
