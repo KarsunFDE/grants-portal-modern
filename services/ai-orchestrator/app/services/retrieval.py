@@ -16,6 +16,7 @@ import uuid
 from datetime import datetime, timedelta
 from typing import List, Optional, Tuple
 
+from app import atlas_search
 from app.db import get_db
 from app.schemas.hitl import (
     Citation,
@@ -113,6 +114,9 @@ class RetrievalService:
         application_data_hash: Optional[str] = None,
         nofo_hash: Optional[str] = None,
         reviewer_state_hash: Optional[str] = None,
+        policy_corpus_hash: Optional[str] = None,
+        coi_state_hash: Optional[str] = None,
+        award_package_hash: Optional[str] = None,
         corpus_version: str = "v1",
         skip_cache: bool = False,
     ) -> Tuple[List[Citation], float, float, datetime]:
@@ -129,6 +133,7 @@ class RetrievalService:
             cached = self._check_cache(
                 db, cache_key, tenant_id,
                 application_data_hash, nofo_hash, reviewer_state_hash,
+                policy_corpus_hash, coi_state_hash, award_package_hash,
             )
             if cached is not None:
                 return cached  # 4-tuple: (citations, confidence, faithfulness, created_at)
@@ -142,6 +147,7 @@ class RetrievalService:
             self._store_cache(
                 db, cache_key, tenant_id, query, citations, confidence, faithfulness,
                 corpus_version, application_data_hash, nofo_hash, reviewer_state_hash,
+                policy_corpus_hash, coi_state_hash, award_package_hash,
             )
 
         return citations, confidence, faithfulness, retrieved_at
@@ -190,6 +196,9 @@ class RetrievalService:
         application_data_hash: Optional[str],
         nofo_hash: Optional[str],
         reviewer_state_hash: Optional[str],
+        policy_corpus_hash: Optional[str] = None,
+        coi_state_hash: Optional[str] = None,
+        award_package_hash: Optional[str] = None,
     ) -> Optional[Tuple[List[Citation], float, float]]:
         try:
             entry = db.retrieval_cache.find_one({"cache_key": cache_key, "tenant_id": tenant_id})
@@ -204,16 +213,18 @@ class RetrievalService:
             db.retrieval_cache.delete_one({"cache_key": cache_key})
             return None
 
-        # Hash checks — invalidation triggers (hitl-plan.txt §Retrieval Invalidation Policy)
-        if application_data_hash and entry.get("application_data_hash") != application_data_hash:
-            db.retrieval_cache.delete_one({"cache_key": cache_key})
-            return None
-        if nofo_hash and entry.get("nofo_hash") != nofo_hash:
-            db.retrieval_cache.delete_one({"cache_key": cache_key})
-            return None
-        if reviewer_state_hash and entry.get("reviewer_state_hash") != reviewer_state_hash:
-            db.retrieval_cache.delete_one({"cache_key": cache_key})
-            return None
+        # Hash checks — all 6 invalidation triggers (hitl-plan.txt §Retrieval Invalidation Policy)
+        for field, value in [
+            ("application_data_hash", application_data_hash),
+            ("nofo_hash", nofo_hash),
+            ("reviewer_state_hash", reviewer_state_hash),
+            ("policy_corpus_hash", policy_corpus_hash),
+            ("coi_state_hash", coi_state_hash),
+            ("award_package_hash", award_package_hash),
+        ]:
+            if value and entry.get(field) != value:
+                db.retrieval_cache.delete_one({"cache_key": cache_key})
+                return None
 
         citations = [Citation(**c) for c in entry.get("citations", [])]
         raw_ts = entry.get("created_at")
@@ -226,9 +237,19 @@ class RetrievalService:
         return citations, entry["confidence_score"], entry["faithfulness_score"], created_at
 
     def _retrieve_from_corpus(self, db, query: str, tenant_id: str) -> List[Citation]:
+        # Atlas Vector Search path — ADR 0006/0007 Phase B.
+        # Activated by ATLAS_RETRIEVAL_ENABLED=true; Atlas is authoritative when live.
+        if atlas_search.ATLAS_RETRIEVAL_ENABLED:
+            results = atlas_search.vector_search(query, tenant_id)
+            if results:
+                return results
+            # vector_search returns [] on error — fall through to static corpus so
+            # grounding checks surface low-confidence rather than silently failing.
+            log.warning("Atlas vector_search returned no results — falling back to static corpus")
+
         citations: List[Citation] = []
 
-        # Try MongoDB clause_library text search (FAR/DFARS corpus)
+        # MongoDB clause_library text search (FAR/DFARS corpus)
         if db is not None:
             try:
                 results = list(
@@ -254,7 +275,8 @@ class RetrievalService:
             except Exception:
                 pass  # text index may not exist yet; fall through to static corpus
 
-        # Static regulatory corpus — keyword match (replaced by Atlas embeddings in W2)
+        # Static regulatory corpus — keyword match.
+        # Diagnostic use only once Atlas is live (ADR 0006 §1).
         citations.extend(self._query_static_corpus(query, tenant_id))
 
         # Deduplicate by source_id, cap at 5
@@ -315,6 +337,9 @@ class RetrievalService:
         application_data_hash: Optional[str],
         nofo_hash: Optional[str],
         reviewer_state_hash: Optional[str],
+        policy_corpus_hash: Optional[str] = None,
+        coi_state_hash: Optional[str] = None,
+        award_package_hash: Optional[str] = None,
     ) -> None:
         try:
             now = datetime.utcnow()
@@ -334,6 +359,9 @@ class RetrievalService:
                     "application_data_hash": application_data_hash,
                     "nofo_hash": nofo_hash,
                     "reviewer_state_hash": reviewer_state_hash,
+                    "policy_corpus_hash": policy_corpus_hash,
+                    "coi_state_hash": coi_state_hash,
+                    "award_package_hash": award_package_hash,
                     "created_at": now,
                     "expires_at": now + timedelta(hours=CACHE_TTL_HOURS),
                 },

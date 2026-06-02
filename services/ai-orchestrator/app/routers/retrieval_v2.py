@@ -19,6 +19,7 @@ from app.schemas.hitl import (
     GATE_OWNER_ROLES,
     GateId,
     GroundedResponse,
+    GroundingStatus,
     InvalidationTrigger,
 )
 from app.services.cache_validator import validate_before_generation
@@ -40,6 +41,9 @@ class RetrievalRequest(BaseModel):
     application_data_hash: Optional[str] = None
     nofo_hash: Optional[str] = None
     reviewer_state_hash: Optional[str] = None
+    policy_corpus_hash: Optional[str] = None
+    coi_state_hash: Optional[str] = None
+    award_package_hash: Optional[str] = None
     corpus_version: str = "v1"
     skip_cache: bool = False
 
@@ -63,6 +67,9 @@ def grounded_search(request: RetrievalRequest) -> GroundedResponse:
         application_data_hash=request.application_data_hash,
         nofo_hash=request.nofo_hash,
         reviewer_state_hash=request.reviewer_state_hash,
+        policy_corpus_hash=request.policy_corpus_hash,
+        coi_state_hash=request.coi_state_hash,
+        award_package_hash=request.award_package_hash,
         corpus_version=request.corpus_version,
         skip_cache=request.skip_cache,
     )
@@ -84,7 +91,7 @@ def grounded_search(request: RetrievalRequest) -> GroundedResponse:
             if r not in human_review_reasons:
                 human_review_reasons.append(r)
         if is_grounded(grounding_status):
-            grounding_status = grounding_status.__class__.UNGROUNDED
+            grounding_status = GroundingStatus.UNGROUNDED
 
     requires_human_review = bool(human_review_reasons)
     hitl_gate: Optional[GateId] = None
