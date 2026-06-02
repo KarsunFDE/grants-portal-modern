@@ -39,6 +39,8 @@ from __future__ import annotations
 import logging
 import os
 import random
+import uuid
+from datetime import datetime
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
@@ -58,6 +60,13 @@ except ImportError:
 from app import legacy_chain  # noqa: F401 — imported to keep the v0.x entry
                                 # point reachable; cohort grep finds the seam.
 from app.bedrock_client import invoke_model, BEDROCK_MODEL_ID, AWS_REGION
+from app.routers import gates as gates_router
+from app.routers import retrieval_v2 as retrieval_v2_router
+from app.services.grounding import compute_grounding_status, is_grounded
+from app.services.retrieval import retrieval_service
+from app.services.gate_enforcer import gate_enforcer
+from app.services.cache_validator import validate_before_generation
+from app.schemas.hitl import GateId, HumanReviewReason, GroundingStatus
 
 # ⚠ DELIBERATE — no correlation-ID in the log format (Item 6).
 logging.basicConfig(
@@ -67,6 +76,8 @@ logging.basicConfig(
 log = logging.getLogger("ai-orchestrator")
 
 app = FastAPI(title="ai-orchestrator", version="0.1.0-brownfield")
+app.include_router(gates_router.router)
+app.include_router(retrieval_v2_router.router)
 
 
 class DraftRequest(BaseModel):
@@ -109,6 +120,7 @@ class IntakeTriageRequest(BaseModel):
 
 class EligibilityCheckRequest(BaseModel):
     """Eligibility/completeness screening request (2 CFR 200.206). ⚠ Item 4 — no Field."""
+    tenant_id: str  # required for tenant isolation (hitl-plan.txt §Tenant Binding Invariant)
     grant_application_id: str | None = None
     applicant_type: str | None = None
     applicant_uei: str | None = None
@@ -183,17 +195,73 @@ def check_eligibility(req: EligibilityCheckRequest) -> dict[str, Any]:
     """
     log.info("check-eligibility application_id=%r applicant_type=%r",
              req.grant_application_id, req.applicant_type)
+
+    # Grounded retrieval — 2 CFR 200.205/206 required before generation (Gate 1)
+    query = (
+        f"eligibility risk review applicant_type={req.applicant_type or ''} "
+        f"assistance_listing={req.assistance_listing_number or ''}"
+    )
+    citations, confidence, faithfulness, retrieved_at = retrieval_service.retrieve(
+        query=query,
+        tenant_id=req.tenant_id,
+    )
+    grounding_status, human_review_reasons = compute_grounding_status(citations, confidence, faithfulness)
+
+    # Cache revalidation before generation (hitl-plan.txt §Cache Revalidation Policy — AC13)
+    cache_ok, cache_reasons = validate_before_generation(
+        citations=citations,
+        confidence_score=confidence,
+        faithfulness_score=faithfulness,
+        cache_created_at=retrieved_at,
+        tenant_id=req.tenant_id,
+    )
+    if not cache_ok:
+        for r in cache_reasons:
+            if r not in human_review_reasons:
+                human_review_reasons.append(r)
+        if is_grounded(grounding_status):
+            grounding_status = GroundingStatus.UNGROUNDED
+
+    # Block ungrounded regulatory guidance (hitl-plan.txt §Grounding Policy)
+    if not is_grounded(grounding_status):
+        ai_run_id = str(uuid.uuid4())
+        escalation = gate_enforcer.create_escalation(
+            gate_id=GateId.GATE_1,
+            tenant_id=req.tenant_id,
+            ai_run_id=ai_run_id,
+            human_review_reasons=human_review_reasons,
+            grounding_status=grounding_status,
+            confidence_score=confidence,
+        )
+        return {
+            "grant_application_id": req.grant_application_id,
+            "eligible": None,
+            "screening_notes": None,
+            "recommended_status": "ESCALATED",
+            "hitl_gate": GateId.GATE_1.value,
+            "escalation_owner": "GRANTS_OFFICER",
+            "requires_human_review": True,
+            "human_review_reasons": [r.value for r in human_review_reasons],
+            "grounding_status": grounding_status.value,
+            "confidence_score": confidence,
+            "faithfulness_score": faithfulness,
+            "retrieved_sources": [c.source_id for c in citations],
+            "citation_refs": [f"{c.regulation}:{c.section}" for c in citations],
+            "escalation_id": escalation.escalation_id,
+            "model": BEDROCK_MODEL_ID,
+        }
+
     bedrock = invoke_model(
         f"Screen this grant application for eligibility and completeness. "
         f"Applicant type: {req.applicant_type or '(unknown)'}; "
         f"Assistance Listing: {req.assistance_listing_number or '(none)'}; "
         f"Federal request: {req.requested_amount_federal or '(none)'}. "
-        f"Context: {req.raw_text or '(none)'}",
+        f"Context: {req.raw_text or '(none)'}. "
+        f"Regulatory basis: {', '.join(c.source_id for c in citations)}.",
         system="You screen federal grant applications for eligibility and "
                "completeness under 2 CFR 200; flag missing SF-424 items and "
                "ineligible applicant types. A Program Officer makes the final call.",
     )
-    # Trivial rule-of-thumb eligibility heuristic (cohort replaces in W2).
     ineligible_types = {"INDIVIDUAL", "FOR_PROFIT"}
     eligible = (req.applicant_type or "").upper() not in ineligible_types
     return {
@@ -201,7 +269,16 @@ def check_eligibility(req: EligibilityCheckRequest) -> dict[str, Any]:
         "eligible": eligible,
         "screening_notes": bedrock["body"],
         "recommended_status": "PEER_REVIEW" if eligible else "WITHDRAWN",
-        "hitl_gate": "program-officer-review-required",
+        "hitl_gate": GateId.GATE_1.value,
+        "escalation_owner": "GRANTS_OFFICER",
+        "requires_human_review": True,  # Gate 1: human decision always required
+        "human_review_reasons": [r.value for r in human_review_reasons],
+        "grounding_status": grounding_status.value,
+        "confidence_score": confidence,
+        "faithfulness_score": faithfulness,
+        "retrieved_sources": [c.source_id for c in citations],
+        "citation_refs": [f"{c.regulation}:{c.section}" for c in citations],
+        "citations": [c.model_dump() for c in citations],
         "model": BEDROCK_MODEL_ID,
     }
 
@@ -299,14 +376,73 @@ def eval_factor_suggest(req: FactorSuggestRequest) -> dict[str, Any]:
     ⚠ Item 6 — no correlation-id forwarded.
     """
     log.info("eval/factor-suggest topic=%r", req.topic)
+
+    # Grounded retrieval — 2 CFR 200.204/205 required before factor suggestion (Gate 3)
+    citations, confidence, faithfulness, retrieved_at = retrieval_service.retrieve(
+        query=f"evaluation factor merit criterion {req.topic}",
+        tenant_id="global",
+    )
+    grounding_status, human_review_reasons = compute_grounding_status(citations, confidence, faithfulness)
+
+    # Cache revalidation before generation (AC13)
+    cache_ok, cache_reasons = validate_before_generation(
+        citations=citations,
+        confidence_score=confidence,
+        faithfulness_score=faithfulness,
+        cache_created_at=retrieved_at,
+        tenant_id="global",
+    )
+    if not cache_ok:
+        for r in cache_reasons:
+            if r not in human_review_reasons:
+                human_review_reasons.append(r)
+        if is_grounded(grounding_status):
+            grounding_status = GroundingStatus.UNGROUNDED
+
+    if not is_grounded(grounding_status):
+        ai_run_id = str(uuid.uuid4())
+        escalation = gate_enforcer.create_escalation(
+            gate_id=GateId.GATE_3,
+            tenant_id="global",
+            ai_run_id=ai_run_id,
+            human_review_reasons=human_review_reasons,
+            grounding_status=grounding_status,
+            confidence_score=confidence,
+        )
+        return {
+            "narrative_suggestion": None,
+            "hitl_gate": GateId.GATE_3.value,
+            "escalation_owner": "HUMAN_REVIEWER",
+            "requires_human_review": True,
+            "human_review_reasons": [r.value for r in human_review_reasons],
+            "grounding_status": grounding_status.value,
+            "confidence_score": confidence,
+            "faithfulness_score": faithfulness,
+            "retrieved_sources": [c.source_id for c in citations],
+            "citation_refs": [f"{c.regulation}:{c.section}" for c in citations],
+            "escalation_id": escalation.escalation_id,
+            "model": BEDROCK_MODEL_ID,
+        }
+
     bedrock = invoke_model(
         f"Suggest a merit-criterion review narrative for: {req.topic}. "
-        f"Application context: {req.constraints or '(none)'}",
+        f"Application context: {req.constraints or '(none)'}. "
+        f"Cite: {', '.join(c.source_id for c in citations)}.",
         system="You suggest peer-reviewer narrative; HITL approves before publish.",
     )
     return {
         "narrative_suggestion": bedrock["body"],
-        "hitl_gate": "evaluator-review-required",
+        # Gate 3 rule: AI suggestions are assistive only — human acceptance always required
+        "hitl_gate": GateId.GATE_3.value,
+        "escalation_owner": "HUMAN_REVIEWER",
+        "requires_human_review": True,
+        "human_review_reasons": [r.value for r in human_review_reasons],
+        "grounding_status": grounding_status.value,
+        "confidence_score": confidence,
+        "faithfulness_score": faithfulness,
+        "retrieved_sources": [c.source_id for c in citations],
+        "citation_refs": [f"{c.regulation}:{c.section}" for c in citations],
+        "citations": [c.model_dump() for c in citations],
         "model": BEDROCK_MODEL_ID,
     }
 
@@ -323,16 +459,75 @@ def eval_ssdd_draft(req: DraftRequest) -> dict[str, Any]:
     ⚠ Item 6 — no correlation-id forwarded.
     """
     log.info("eval/ssdd-draft topic=%r", req.topic)
+
+    # Grounded retrieval — 2 CFR 200.205/212 required before award package (Gate 4)
+    citations, confidence, faithfulness, retrieved_at = retrieval_service.retrieve(
+        query=f"award decision funding recommendation {req.topic}",
+        tenant_id="global",
+    )
+    grounding_status, human_review_reasons = compute_grounding_status(citations, confidence, faithfulness)
+
+    # Cache revalidation before generation (AC13)
+    cache_ok, cache_reasons = validate_before_generation(
+        citations=citations,
+        confidence_score=confidence,
+        faithfulness_score=faithfulness,
+        cache_created_at=retrieved_at,
+        tenant_id="global",
+    )
+    if not cache_ok:
+        for r in cache_reasons:
+            if r not in human_review_reasons:
+                human_review_reasons.append(r)
+        if is_grounded(grounding_status):
+            grounding_status = GroundingStatus.UNGROUNDED
+
+    if not is_grounded(grounding_status):
+        ai_run_id = str(uuid.uuid4())
+        escalation = gate_enforcer.create_escalation(
+            gate_id=GateId.GATE_4,
+            tenant_id="global",
+            ai_run_id=ai_run_id,
+            human_review_reasons=human_review_reasons,
+            grounding_status=grounding_status,
+            confidence_score=confidence,
+        )
+        return {
+            "ssdd_narrative": None,
+            "clause_id": None,
+            "hitl_gate": GateId.GATE_4.value,
+            "escalation_owner": "GRANTS_OFFICER",
+            "requires_human_review": True,
+            "human_review_reasons": [r.value for r in human_review_reasons],
+            "grounding_status": grounding_status.value,
+            "confidence_score": confidence,
+            "faithfulness_score": faithfulness,
+            "retrieved_sources": [c.source_id for c in citations],
+            "citation_refs": [f"{c.regulation}:{c.section}" for c in citations],
+            "escalation_id": escalation.escalation_id,
+            "model": BEDROCK_MODEL_ID,
+        }
+
     bedrock = invoke_model(
         f"Draft a panel funding-recommendation narrative for: {req.topic}. "
-        f"Constraints: {req.constraints or 'merit-based selection per 2 CFR 200.205'}.",
+        f"Constraints: {req.constraints or 'merit-based selection per 2 CFR 200.205'}. "
+        f"Regulatory basis: {', '.join(c.source_id for c in citations)}.",
         system="You draft funding-recommendation memos; the Selecting Official reviews + approves.",
     )
-    # Provide a clause_id field so peer-review-service can stash it.
     return {
         "ssdd_narrative": bedrock["body"],
         "clause_id": f"REC-{random.randint(1000, 9999)}",
-        "hitl_gate": "selecting-official-approval-required",
+        # Gate 4: no unattended award — human approval always required
+        "hitl_gate": GateId.GATE_4.value,
+        "escalation_owner": "GRANTS_OFFICER",
+        "requires_human_review": True,
+        "human_review_reasons": [r.value for r in human_review_reasons],
+        "grounding_status": grounding_status.value,
+        "confidence_score": confidence,
+        "faithfulness_score": faithfulness,
+        "retrieved_sources": [c.source_id for c in citations],
+        "citation_refs": [f"{c.regulation}:{c.section}" for c in citations],
+        "citations": [c.model_dump() for c in citations],
         "model": BEDROCK_MODEL_ID,
     }
 
