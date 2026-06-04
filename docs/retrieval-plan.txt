@@ -120,9 +120,14 @@ Required metadata per chunk (stored in corpus_chunks collection):
    token_count       — stored at ingest time
    last_revised      — document revision date (ISO 8601)
    corpus_version    — monotonic version of the corpus build
-   tenant_id         — "__global__" for shared regulatory; authority-derived for NOFO/Q&A
-   ingested_at       — UTC timestamp
-   embedding         — 1024-float vector (Titan v2)
+   tenant_id              — "__global__" for shared regulatory; authority-derived for NOFO/Q&A
+                            NOTE: literal value must be "__global__" (with underscores).
+                            No alternate forms ("global", "GLOBAL") are permitted; Atlas
+                            pre-filter OR clause matches this exact string.
+   ingested_at            — UTC timestamp
+   embedding_model_version — e.g., "amazon.titan-embed-text-v2:0"; stored at ingest time;
+                            checked at startup to detect embedding drift (see Section 15)
+   embedding              — 1024-float vector (Titan v2)
 
 ================================================================================
 SECTION 3 — EMBEDDING STRATEGY
@@ -328,9 +333,10 @@ Query-time parameters (adjustable per query without rebuild):
                            k=10 chunks returned → numCandidates=150 minimum
                            Increase numCandidates first if recall is low;
                            rebuild only if numCandidates > 500 and recall still insufficient
-
-Q: Recall requirements?
-A: Recall@5 >= 0.80 for regulatory queries (see Section 6)
+                           IMPLEMENTATION NOTE: do NOT derive numCandidates as limit * 4.
+                           With limit=5, that yields 20 — far below the 10×k floor and
+                           will collapse recall. Use 150 as a fixed floor:
+                             numCandidates = max(150, limit * 15)
 
 Q: Memory constraints?
 A: Phase 1 corpus: ~500K chunks × 1024 dims × 4 bytes = ~2 GB vector data
@@ -484,7 +490,9 @@ A: Retrieval Augmented Generation Assessment framework.
    Open-source library (pip install ragas) for evaluating RAG pipeline quality.
    Does not require labeled human answers for all metrics; some use LLM-as-judge internally.
    Docs: https://docs.ragas.io
-   Package: ragas (install separately; not yet in requirements.txt)
+   Package: ragas — add to requirements.txt before Gate 1 integration.
+   Acceptance criterion #14 (Recall@5 >= 0.80 against labeled set) is a hard gate
+   that cannot pass without ragas installed and an SME-labeled evaluation set present.
 
 RAGAS metrics we will use:
    faithfulness          — is the generated answer supported by retrieved context?
@@ -749,11 +757,14 @@ Response: Catch exception; log warning; fall to Layer 2 (MongoDB text search)
 
 FAILURE: Bedrock embedding API unavailable
 Detection: boto3 exception in atlas_search.py get_embedding()
-Response: Return zero vector [0.0 × 1024] (current behavior — flagged as technical debt)
-          IMPROVEMENT: on embedding failure, skip vector search entirely;
-          fall to Layer 2 immediately; log.error("bedrock_embedding_failed", ...)
-          Never silently use zero vector; zero vector will return cosine similarity
-          of 0 for all results (meaningless ranking)
+Response: REQUIRED: on embedding failure, skip vector search entirely;
+          fall to Layer 2 (MongoDB text search) immediately;
+          log.error("bedrock_embedding_failed", reason=str(exc), ...)
+          NEVER return zero vector [0.0 × 1024] and proceed with vector search.
+          Zero vector yields cosine similarity of 0 against all corpus vectors —
+          meaningless ranking indistinguishable from a successful near-zero match.
+CONFIRMED CODE DEFECT: atlas_search.py currently returns zero vector on exception.
+          Fix required before enabling ATLAS_RETRIEVAL_ENABLED=true in any environment.
 
 FAILURE: Cache corruption (stale entry passes freshness but has wrong tenant)
 Detection: cache_validator.py tenant_id check (already implemented)
@@ -768,34 +779,14 @@ Response: Cache invalidation already handles this (6-trigger system);
 SECTION 16 — MULTI-TENANT RETRIEVAL
 ================================================================================
 
-Q: How do we manage multi-tenant retrieval processes?
-A: Four isolation mechanisms:
+All four isolation layers (storage, query, cache, audit) are fully specified in Section 5.
 
-1. Data isolation at storage:
-   - Global regulatory content: tenant_id = "__global__"; shared across all tenants
-   - Tenant-specific content (NOFO, Q&A): tenant_id = authority-issued tenant identifier
-   - No tenant-specific content shares storage with another tenant's content
-
-2. Query isolation at retrieval:
-   - Atlas pre-filter always includes tenant_id constraint (see Section 5)
-   - Query: { OR: [tenant_id == request_tenant_id, tenant_id == "__global__"] }
-   - BM25 fallback: filtered by same tenant_id constraint before keyword search
-
-3. Cache isolation:
-   - Cache key includes tenant_id: different tenants never share cache entries
-   - Tenant_id validated on cache retrieval (cache_validator.py)
-
-4. Audit isolation:
-   - Every audit record carries tenant_id
-   - Gate decisions validate evidence_ref tenant_id == decision tenant_id
-   - No cross-tenant audit query paths exposed in API
-
-Q: What about shared regulatory corpus performance?
-A: Global chunks (__global__ tenant_id) are cached without tenant scoping at the
-   embedding layer (same vectors for all tenants). Cache key still includes tenant_id
-   to isolate any tenant-specific context that co-mingles with global results.
-   At high query volume: global regulatory cache hit rate will be high (same queries
-   across tenants); cost benefit increases with tenant count.
+Implementation notes not covered in Section 5:
+   - BM25 fallback must apply the same tenant_id OR "__global__" pre-filter as the Atlas
+     $vectorSearch stage. Never BM25-search an unfiltered document set.
+   - Global regulatory vectors (tenant_id = "__global__") produce identical embeddings for
+     all tenants. Cache hit rate for regulatory queries grows with tenant count. Cache key
+     still includes tenant_id to prevent cross-tenant context contamination in mixed results.
 
 ================================================================================
 SECTION 17 — LANGCHAIN V1.0 TOOLS INVENTORY
@@ -831,6 +822,14 @@ LLM integration:
 
 Document model:
    langchain_core.documents.Document                         — (page_content, metadata) container
+
+Required pip packages:
+   langchain==0.3.x           — core (EnsembleRetriever, ContextualCompressionRetriever, LCEL)
+   langchain-core==0.3.x      — Document, BaseRetriever, Runnables, prompts, parsers
+   langchain-aws==0.2.x       — BedrockEmbeddings, ChatBedrock
+   langchain-community==0.3.x — MongoDBAtlasVectorSearch, BM25Retriever
+   langchain-community is REQUIRED for hybrid retrieval; verify present in requirements.txt
+   before implementing Section 6 hybrid path.
 
 NOT using (out of scope or replaced by custom):
    langchain.chains.RetrievalQA                              — use LCEL pipeline instead (v1.0 pattern)
@@ -874,7 +873,27 @@ Audit access:
 Query-time protection:
    - Never log raw query text (may contain applicant PII)
    - Log query_hash only; link to full audit record by ai_run_id if investigation needed
-   - Bedrock: queries go to AWS infrastructure; subject to AWS BAA (check if needed for PHI)
+   - Bedrock: queries go to AWS infrastructure; AWS BAA required if PHI enters query stream
+     (possible in health grant contexts — confirm before ingesting health NOFO content)
+
+Government compliance:
+   FedRAMP boundary: Atlas M10+ and AWS Bedrock (us-east-1) are FedRAMP Moderate authorized.
+   All data processing must remain within this boundary. Verify any new infrastructure
+   component before adding it to the stack.
+
+   ATO (Authority to Operate): this AI subsystem must be within the agency FISMA ATO
+   boundary. Retrieval audit logs satisfy NIST 800-53 AU-3, AU-9, and AU-12 controls.
+   Coordinate with the agency ISSO before production deployment.
+
+   Records retention: hitl_audit_trail and retrieval_invalidation_events are federal grant
+   records subject to 2 CFR 200.334. Minimum retention: 3 years from final action on the
+   grant; extend to 7 years if litigation, claim, or audit is pending. Implement a
+   legal-hold flag on audit collections; no DELETE permitted on flagged records.
+
+   CUI: NOFO content and applicant Q&A may be Controlled Unclassified Information under
+   32 CFR Part 2002. Classify corpus content before ingestion. Do not ingest CUI into a
+   collection without CUI-compliant access controls in place. Public regulatory text
+   (2 CFR 200, 45 CFR 75) is not CUI.
 
 ================================================================================
 SECTION 19 — METADATA PERSISTENCE (END TO END)
@@ -883,9 +902,7 @@ SECTION 19 — METADATA PERSISTENCE (END TO END)
 Metadata must travel without loss from ingestion through audit log.
 
 Ingestion → corpus_chunks (MongoDB Atlas):
-   chunk_id, source_id, regulation, section, subsection, section_title,
-   parent_chunk_id, chunk_index, token_count, last_revised, corpus_version,
-   tenant_id, ingested_at, embedding_model_version, embedding
+   All fields defined in Section 2 required metadata schema (including embedding_model_version).
 
 corpus_chunks → retrieval result (Document object):
    langchain_core.documents.Document.metadata carries all non-vector fields
@@ -1081,6 +1098,86 @@ Ignoring corpus version in cache key:
    RIGHT: Cache key = SHA256(query|tenant_id|corpus_version) — already implemented
 
 ================================================================================
+SECTION 24 — GAP CLOSURE ADDENDUM (RETRIEVAL)
+================================================================================
+
+Purpose: fill high-impact gaps that commonly appear after first retrieval implementation.
+
+1) Latency decomposition and timeout behavior:
+   - Define p95 budgets per stage (embed, dense search, sparse search, rerank,
+     grounding checks, response assembly)
+   - Define stage-level hard timeouts and deterministic failover behavior
+     (skip rerank vs escalate)
+   - Track p99 by gate and add load-test targets before production cutover
+
+2) Confidence and faithfulness calibration:
+   - Calibrate thresholds using labeled data before gate enforcement
+   - Track false-accept and false-reject rates per gate
+   - Publish confidence calibration table to prove score reliability over time
+
+3) Relevance/ranking evaluation depth:
+   - Expand evaluation set with stratified query classes:
+     citation-exact, semantic-only, conflicting guidance, ambiguous wording, no-answer
+   - Include adversarial retrieval tests (prompt-injected or malformed policy text)
+   - Require Recall@5 and NDCG reporting by source type (CFR, NOFO, policy, Q&A)
+
+4) Reranking governance and cost ceiling:
+   - Set explicit max candidates, token budget, and timeout per rerank request
+   - Require deterministic fallback when reranker times out or returns malformed output
+   - Log pre-rerank and post-rerank rank lists for audit replay
+
+5) Audit replay completeness:
+   - Persist retrieval filter object, candidate IDs, candidate scores,
+     reranker model ID, generation model ID, and prompt template version
+   - Ensure auditor can replay a gate decision with timestamp + ai_run_id only
+   - Define retention period and legal-hold behavior for retrieval traces
+
+6) Regulatory precedence and contradiction policy:
+   - Define precedence order for conflicting sources (CFR vs NOFO vs agency policy)
+   - Define effective-date tie-break policy for amendments and superseded text
+   - Add explicit contradiction reason codes used by escalation workflow
+
+7) Temporal correctness for future audits:
+   - Require as-of retrieval replay by decision timestamp
+   - Snapshot corpus_version and source revision set used at decision time
+   - Block reuse of cached answers when source revision timeline changes
+
+8) Cost governance guardrails:
+   - Set per-endpoint monthly and per-request budget caps
+   - Define automatic degradation path when spend threshold is exceeded
+   - Include retrieval cost-per-success metric (not only raw token cost)
+
+9) Provenance and corpus integrity protections:
+   - Record source URI, checksum, approver, and ingestion actor for each source file
+   - Require source integrity verification before embedding
+   - Quarantine unapproved or malformed corpus content before indexing
+
+10) Resilience and operational readiness:
+   - Execute chaos scenarios: Atlas timeout, Bedrock timeout, cache outage, partial index outage
+   - Define runbook with owner, SLA, and rollback path for each failure mode
+   - Add weekly retrieval regression checks against prior baseline metrics
+
+Launch prioritization (new gap items):
+
+Must-have for launch (block production if missing):
+   - 1) Latency decomposition and timeout behavior
+   - 2) Confidence and faithfulness calibration
+   - 4) Reranking governance and cost ceiling
+   - 5) Audit replay completeness
+   - 6) Regulatory precedence and contradiction policy
+   - 8) Cost governance guardrails
+   - 9) Provenance and corpus integrity protections
+
+Can defer post-launch (ship with scheduled milestone + owner):
+   - 3) Relevance/ranking evaluation depth (full stratification expansion)
+   - 7) Temporal correctness for future audits (as-of replay hardening)
+   - 10) Resilience and operational readiness (full chaos cadence)
+
+Post-launch guardrail:
+   - Deferred items must have committed due date, owner, and risk acceptance note
+     in release artifacts before go-live sign-off.
+
+================================================================================
 OUT OF SCOPE — PHASE 1
 ================================================================================
    - Full autonomous decisioning (no human in loop)
@@ -1110,6 +1207,29 @@ ACCEPTANCE CRITERIA (RETRIEVAL LAYER)
   12. Response JSON includes all required fields (Section 14 full shape)
   13. requires_human_review flag set correctly for all escalation conditions
   14. Offline Recall@5 >= 0.80 against SME-labeled evaluation set before Gate 1 integration
+   15. Stage-level p95/p99 latency budgets and timeout behavior are documented and tested
+   16. Confidence and faithfulness thresholds are calibrated and monitored per gate
+   17. Reranking enforces max-candidate, token, and timeout guardrails with deterministic fallback
+   18. Retrieval trace replay is possible using ai_run_id and decision timestamp only
+   19. Regulatory contradiction precedence and escalation reason codes are enforced
+   20. Cost caps and degradation behavior are validated in staging
+   21. Source provenance metadata (checksum, approver, URI) is stored for all indexed documents
+   22. Quarterly audit replay drill succeeds for sampled gate decisions
+   23. Bedrock embedding failure falls to Layer 2 immediately; zero vector never used as input
+       to vector search (confirmed defect in atlas_search.py must be resolved first)
+   24. numCandidates = max(150, limit * 15) in every $vectorSearch call; never derived as limit * 4
+   25. corpus_chunks.tenant_id == "__global__" (exact) for all shared regulatory content;
+       $vectorSearch OR filter matches this exact string; no alternate forms in code or data
+   26. embedding_model_version stored in every corpus_chunks document at ingest time;
+       startup validates current model ID matches stored value; mismatch triggers re-ingest
+   27. Cache key computed from normalized (lowercase, stripped) query before SHA256;
+       "Merit Review" and "merit review" produce the same cache key
+   28. Static corpus confidence capped at 0.50 in _compute_confidence(); static hits never
+       reported as high-confidence to gates
+   29. Gate 1 confidence threshold enforced at 0.65 (not 0.70); gate_id passed to grounding
+       check so gate-differentiated thresholds apply (Gate 1: 0.65; Gates 3/4: 0.70)
+   30. ragas added to requirements.txt and SME-labeled evaluation set present before Gate 1
+       integration (hard gate; blocks AC #14)
 
 ================================================================================
 END OF RETRIEVAL PLAN
