@@ -39,6 +39,17 @@ services:
     volumes:
       - mongo-data:/data/db   # ← inconsistency vs postgres — teaching moment
 
+  # ADR 0007 Phase B — Atlas Local for vector search development.
+  # Same collection schema and index definitions as managed Atlas (ADR 0006 §2).
+  # Exposed on host port 27018 to avoid conflict with plain mongo above.
+  # Set ATLAS_RETRIEVAL_ENABLED=true in ai-orchestrator to activate.
+  mongodb-atlas-local:
+    image: mongodb/mongodb-atlas-local
+    ports:
+      - "27018:27017"
+    volumes:
+      - atlas-data:/data/db
+
   api-gateway:
     build:
       context: ../../services/api-gateway
@@ -97,6 +108,12 @@ services:
       AWS_REGION: us-east-1
       BEDROCK_MODEL_ID: anthropic.claude-3-7-sonnet-20250219-v1:0
       MONGO_URL: mongodb://app:app_dev_password@mongodb:27017
+      ATLAS_URI: mongodb://mongodb-atlas-local:27017
+      ATLAS_DB_NAME: grantsportal_retrieval
+      ATLAS_RETRIEVAL_ENABLED: "false"   # Phase B: flip to "true" after ingest_corpus.py runs
+    depends_on:
+      - mongodb
+      - mongodb-atlas-local
     # ⚠ DELIBERATE: no AWS creds wired — relies on shared dev IAM role being
     #   mounted via ~/.aws/credentials. The Bedrock stub returns mock data
     #   so it works without real creds. First-day learners discover this and
@@ -115,3 +132,4 @@ services:
 
 volumes:
   mongo-data:
+  atlas-data:
