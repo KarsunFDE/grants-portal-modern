@@ -15,29 +15,8 @@ from app.services.retrieval import RetrievalService, _make_cache_key
 
 
 class TestRetrievalService:
-    def test_static_corpus_keyword_match_eligibility(self):
-        svc = RetrievalService()
-        citations = svc._query_static_corpus("eligibility risk review applicant", "tenant-1")
-        source_ids = {c.source_id for c in citations}
-        assert "2-CFR-200.206" in source_ids
-
-    def test_static_corpus_keyword_match_merit(self):
-        svc = RetrievalService()
-        citations = svc._query_static_corpus("merit review competitive proposal", "tenant-1")
-        source_ids = {c.source_id for c in citations}
-        assert "2-CFR-200.205" in source_ids
-
-    def test_static_corpus_keyword_match_coi(self):
-        svc = RetrievalService()
-        citations = svc._query_static_corpus("conflict of interest reviewer panel", "tenant-1")
-        source_ids = {c.source_id for c in citations}
-        assert "2-CFR-200.318" in source_ids
-
-    def test_static_corpus_keyword_match_award(self):
-        svc = RetrievalService()
-        citations = svc._query_static_corpus("award decision rationale documentation", "tenant-1")
-        source_ids = {c.source_id for c in citations}
-        assert "2-CFR-200.212" in source_ids
+    # Static corpus removed from retrieval path (ADR 0007 / ADR 0009).
+    # Atlas Local is now the primary retrieval source; _query_static_corpus no longer exists.
 
     def test_confidence_zero_without_citations(self):
         svc = RetrievalService()
@@ -53,6 +32,11 @@ class TestRetrievalService:
         assert conf > 0.0
         assert conf <= 0.95
 
+    def test_confidence_never_exceeds_cap(self):
+        svc = RetrievalService()
+        many = [Citation(chunk_id=f"c{i}", source_id=f"s{i}", regulation="2 CFR 200", tenant_id="t") for i in range(10)]
+        assert svc._compute_confidence(many, "q") <= 0.95
+
     def test_faithfulness_zero_without_citations(self):
         svc = RetrievalService()
         assert svc._compute_faithfulness([]) == 0.0
@@ -62,6 +46,19 @@ class TestRetrievalService:
         c1 = [Citation(chunk_id=f"c{i}", source_id=f"s{i}", tenant_id="t1") for i in range(1, 3)]
         c2 = [Citation(chunk_id=f"c{i}", source_id=f"s{i}", tenant_id="t1") for i in range(1, 6)]
         assert svc._compute_faithfulness(c2) > svc._compute_faithfulness(c1)
+
+    def test_retrieve_returns_empty_when_atlas_and_db_unavailable(self):
+        """With no Atlas and no DB, retrieve returns empty citations and triggers escalation path."""
+        svc = RetrievalService()
+        with patch("app.services.retrieval.atlas_search.ATLAS_RETRIEVAL_ENABLED", False):
+            citations, conf, faith, _, strategy, cache_hit = svc.retrieve(
+                query="merit review eligibility",
+                tenant_id="tenant-1",
+            )
+        assert citations == []
+        assert conf == 0.0
+        assert faith == 0.0
+        assert cache_hit is False
 
 
 class TestCacheInvalidation:
@@ -155,10 +152,11 @@ class TestCacheInvalidation:
         svc = RetrievalService()
         result = svc._check_cache(mock_db, "k", "t", "hash-1", "nofo-1", "rs-1")
         assert result is not None
-        citations, conf, faith, retrieved_at = result
+        citations, conf, faith, retrieved_at, strategy = result
         assert conf == 0.85
         assert faith == 0.90
         assert retrieved_at is not None
+        assert strategy is None  # no retrieval_strategy in mock entry — expected for old entries
 
     def test_expired_cache_bypassed(self, mock_db):
         mock_db.retrieval_cache.find_one.return_value = {

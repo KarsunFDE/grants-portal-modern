@@ -61,7 +61,7 @@ def grounded_search(request: RetrievalRequest) -> GroundedResponse:
     If output is ungrounded/low-confidence: blocks and escalates to named gate owner.
     Escalation created regardless of whether gate_context is set — no silent retries.
     """
-    citations, confidence, faithfulness, retrieved_at = retrieval_service.retrieve(
+    citations, confidence, faithfulness, retrieved_at, retrieval_strategy, is_cache_hit = retrieval_service.retrieve(
         query=request.query,
         tenant_id=request.tenant_id,
         application_data_hash=request.application_data_hash,
@@ -75,7 +75,7 @@ def grounded_search(request: RetrievalRequest) -> GroundedResponse:
     )
 
     grounding_status, human_review_reasons = compute_grounding_status(
-        citations, confidence, faithfulness
+        citations, confidence, faithfulness, gate_id=request.gate_context
     )
 
     # Cache revalidation before returning results (hitl-plan.txt §Cache Revalidation Policy — AC13)
@@ -85,6 +85,8 @@ def grounded_search(request: RetrievalRequest) -> GroundedResponse:
         faithfulness_score=faithfulness,
         cache_created_at=retrieved_at,
         tenant_id=request.tenant_id,
+        gate_id=request.gate_context,
+        retrieval_strategy=retrieval_strategy,
     )
     if not cache_ok:
         for r in cache_reasons:
@@ -93,24 +95,28 @@ def grounded_search(request: RetrievalRequest) -> GroundedResponse:
         if is_grounded(grounding_status):
             grounding_status = GroundingStatus.UNGROUNDED
 
+    # ai_run_id generated once here — same ID used in escalation record AND client response.
+    # Callers must be able to locate the escalation by the ai_run_id they receive.
+    ai_run_id = str(uuid.uuid4())
+
     requires_human_review = bool(human_review_reasons)
     hitl_gate: Optional[GateId] = None
     escalation_owner: Optional[str] = None
+    escalation_id: Optional[str] = None
 
     if requires_human_review:
-        # Route to provided gate_context, or default to GATE_1.
-        # Spec: "No silent retries — every escalation creates a gate decision record."
         hitl_gate = request.gate_context or _DEFAULT_ESCALATION_GATE
         owners = GATE_OWNER_ROLES.get(hitl_gate, [])
         escalation_owner = owners[0].value if owners else None
-        gate_enforcer.create_escalation(
+        escalation = gate_enforcer.create_escalation(
             gate_id=hitl_gate,
             tenant_id=request.tenant_id,
-            ai_run_id=str(uuid.uuid4()),  # unique per call for audit traceability
+            ai_run_id=ai_run_id,
             human_review_reasons=human_review_reasons,
             grounding_status=grounding_status,
             confidence_score=confidence,
         )
+        escalation_id = escalation.escalation_id
 
     retrieved_sources = list({c.source_id for c in citations})
     citation_refs = [
@@ -129,6 +135,11 @@ def grounded_search(request: RetrievalRequest) -> GroundedResponse:
         human_review_reasons=human_review_reasons,
         hitl_gate=hitl_gate,
         escalation_owner=escalation_owner,
+        escalation_id=escalation_id,
+        ai_run_id=ai_run_id,
+        corpus_version=request.corpus_version,
+        cache_hit=is_cache_hit,
+        retrieval_strategy=retrieval_strategy,
     )
 
 
