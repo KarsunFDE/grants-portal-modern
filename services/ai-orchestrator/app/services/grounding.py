@@ -27,7 +27,9 @@ _CONFIDENCE_THRESHOLDS: Dict[GateId, float] = {
     GateId.GATE_4: 0.70,
 }
 _FAITHFULNESS_THRESHOLDS: Dict[GateId, float] = {
-    GateId.GATE_1: 0.65,
+    # Gate 1 threshold must not be lowered below 0.70 without attached RAGAS eval evidence
+    # showing pass-risk at the lower value is acceptable for a federal eligibility determination.
+    GateId.GATE_1: 0.70,
     GateId.GATE_3: 0.70,
     GateId.GATE_4: 0.70,
 }
@@ -42,15 +44,16 @@ FAITHFULNESS_THRESHOLD = _DEFAULT_FAITHFULNESS_THRESHOLD
 GATE_CONFIDENCE_THRESHOLDS: Dict[GateId, float] = _CONFIDENCE_THRESHOLDS
 GATE_FAITHFULNESS_THRESHOLDS: Dict[GateId, float] = _FAITHFULNESS_THRESHOLDS
 
-# ADR 0009 §11 — regulatory source precedence order (1 = highest authority).
+# ADR 0009 §11 — grants regulatory source precedence (1 = highest authority).
+# FAR/DFARS are acquisition regulations and do not belong in this table; they collide
+# with NOFO's rank 3 and cannot participate in grants-domain precedence conflict detection.
+# FAR/DFARS conflict detection is handled separately in _has_far_dfars_conflict.
 REGULATION_PRECEDENCE: Dict[str, int] = {
     "2 CFR 200": 1,
     "45 CFR 75": 2,
     "NOFO": 3,
     "AGENCY_POLICY": 4,
     "QA": 5,
-    "FAR": 3,
-    "DFARS": 3,
 }
 
 
@@ -101,12 +104,22 @@ def compute_grounding_status(
     if not reasons:
         return GroundingStatus.GROUNDED, []
 
-    # Determine primary status — most severe first
+    # Determine primary status — most severe first.
+    # ADR 0009 §11: ALL conflict reason codes map to CITATION_CONFLICT, not UNGROUNDED.
+    # Precedence conflicts (CFR_NOFO_CONFLICT, AGENCY_POLICY_CONFLICT, AMENDMENT_SUPERSEDES)
+    # and procurement conflicts (FAR_DFARS_CONFLICT) indicate contradictory sources, not
+    # an absence of grounding — falling through to UNGROUNDED would corrupt the audit record.
+    _CITATION_CONFLICT_REASONS = {
+        HumanReviewReason.CITATION_CONFLICT,
+        HumanReviewReason.REGULATORY_CONFLICT,
+        HumanReviewReason.CFR_NOFO_CONFLICT,
+        HumanReviewReason.AGENCY_POLICY_CONFLICT,
+        HumanReviewReason.AMENDMENT_SUPERSEDES,
+        HumanReviewReason.FAR_DFARS_CONFLICT,
+    }
     if confidence_score < conf_threshold:
         return GroundingStatus.LOW_CONFIDENCE, reasons
-    if HumanReviewReason.CITATION_CONFLICT in reasons:
-        return GroundingStatus.CITATION_CONFLICT, reasons
-    if HumanReviewReason.REGULATORY_CONFLICT in reasons:
+    if any(r in _CITATION_CONFLICT_REASONS for r in reasons):
         return GroundingStatus.CITATION_CONFLICT, reasons
 
     return GroundingStatus.UNGROUNDED, reasons
@@ -175,17 +188,32 @@ def _detect_precedence_conflict(citations: List[Citation]) -> Optional[HumanRevi
 
 def _detect_version_mismatch(citations: List[Citation]) -> Optional[HumanReviewReason]:
     """
-    ADR 0009 §11 — detect multiple last_revised dates for the same source_id.
-    Retrieval layer (retrieval.py:_filter_superseded_amendments) already removes older
-    versions; if duplicates still appear here, a supersession conflict survived filtering
-    and requires human review. Returns AMENDMENT_SUPERSEDES in that case.
-    VERSION_MISMATCH is returned when source_id is the same but dates differ unexpectedly
-    (e.g., different regulation enum for same section).
+    ADR 0009 §11 — two distinct conflict types detected here:
+
+    AMENDMENT_SUPERSEDES: same source_id appears with multiple last_revised dates.
+      The retrieval layer (_filter_superseded_amendments) should have dropped older
+      revisions; if duplicates survive to this point, a supersession conflict escaped
+      filtering and requires human review.
+
+    VERSION_MISMATCH: same source_id appears with multiple distinct regulation enum values
+      (e.g., the same chunk_id indexed under both "2 CFR 200" and "45 CFR 75").
+      This indicates a corpus integrity problem that cannot be resolved automatically.
+
+    Returns the most severe reason detected, or None if no mismatch.
     """
     source_dates: Dict[str, Set[str]] = {}
+    source_regs: Dict[str, Set[str]] = {}
     for c in citations:
-        if c.source_id and c.last_revised:
+        if not c.source_id:
+            continue
+        if c.last_revised:
             source_dates.setdefault(c.source_id, set()).add(c.last_revised)
+        if c.regulation:
+            source_regs.setdefault(c.source_id, set()).add(c.regulation)
+
+    # VERSION_MISMATCH is more severe (corpus integrity problem) — check first.
+    if any(len(regs) > 1 for regs in source_regs.values()):
+        return HumanReviewReason.VERSION_MISMATCH
     if any(len(dates) > 1 for dates in source_dates.values()):
         return HumanReviewReason.AMENDMENT_SUPERSEDES
     return None

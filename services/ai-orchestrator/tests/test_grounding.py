@@ -13,6 +13,7 @@ from app.schemas.hitl import Citation, GroundingStatus, HumanReviewReason
 from app.services.grounding import (
     CONFIDENCE_THRESHOLD,
     FAITHFULNESS_THRESHOLD,
+    _detect_precedence_conflict,
     _has_citation_conflict,
     _has_far_dfars_conflict,
     _has_regulatory_conflict,
@@ -150,6 +151,92 @@ class TestConflictDetectors:
             Citation(chunk_id="c1", source_id="s1", section="52.215-1", regulation="FAR", tenant_id="t1"),
         ]
         assert _has_far_dfars_conflict(citations) is False
+
+
+# ---------------------------------------------------------------------------
+# ADR 0009 §11 — precedence conflict → CITATION_CONFLICT status (not UNGROUNDED)
+# ---------------------------------------------------------------------------
+
+class TestPrecedenceConflictStatus:
+    """
+    REQ: all §11 precedence reason codes must produce GroundingStatus.CITATION_CONFLICT,
+    not UNGROUNDED. Prior bug: only legacy CITATION_CONFLICT / REGULATORY_CONFLICT were
+    mapped; CFR_NOFO_CONFLICT / AGENCY_POLICY_CONFLICT / AMENDMENT_SUPERSEDES fell through
+    to UNGROUNDED, corrupting the audit record.
+    """
+
+    def test_cfr_nofo_conflict_yields_citation_conflict_status(self):
+        # 2 CFR 200 (rank 1) and NOFO (rank 3) cite the same section → CFR_NOFO_CONFLICT
+        citations = [
+            Citation(chunk_id="c1", source_id="s1", section="200.205",
+                     regulation="2 CFR 200", tenant_id="t1"),
+            Citation(chunk_id="c2", source_id="s2", section="200.205",
+                     regulation="NOFO", tenant_id="t1"),
+        ]
+        status, reasons = compute_grounding_status(citations, 0.85, 0.90)
+        assert HumanReviewReason.CFR_NOFO_CONFLICT in reasons
+        assert status == GroundingStatus.CITATION_CONFLICT, (
+            f"Expected CITATION_CONFLICT for CFR/NOFO precedence conflict, got {status}"
+        )
+
+    def test_agency_policy_conflict_yields_citation_conflict_status(self):
+        # NOFO (rank 3) and AGENCY_POLICY (rank 4) cite the same section
+        citations = [
+            Citation(chunk_id="c1", source_id="s1", section="200.205",
+                     regulation="NOFO", tenant_id="t1"),
+            Citation(chunk_id="c2", source_id="s2", section="200.205",
+                     regulation="AGENCY_POLICY", tenant_id="t1"),
+        ]
+        status, reasons = compute_grounding_status(citations, 0.85, 0.90)
+        assert HumanReviewReason.AGENCY_POLICY_CONFLICT in reasons
+        assert status == GroundingStatus.CITATION_CONFLICT, (
+            f"Expected CITATION_CONFLICT for NOFO/AGENCY_POLICY conflict, got {status}"
+        )
+
+    def test_far_dfars_conflict_yields_citation_conflict_status(self):
+        citations = [
+            Citation(chunk_id="c1", source_id="s1", section="52.215-1",
+                     regulation="FAR", tenant_id="t1"),
+            Citation(chunk_id="c2", source_id="s2", section="52.215-1",
+                     regulation="DFARS", tenant_id="t1"),
+        ]
+        status, reasons = compute_grounding_status(citations, 0.85, 0.90)
+        assert HumanReviewReason.FAR_DFARS_CONFLICT in reasons
+        assert status == GroundingStatus.CITATION_CONFLICT, (
+            f"Expected CITATION_CONFLICT for FAR/DFARS conflict, got {status}"
+        )
+
+    def test_amendment_supersedes_yields_citation_conflict_status(self):
+        # Same source_id, two different last_revised dates — supersession conflict
+        citations = [
+            Citation(chunk_id="c1", source_id="2-CFR-200.205", section="200.205",
+                     regulation="2 CFR 200", last_revised="2023-01-01", tenant_id="t1"),
+            Citation(chunk_id="c2", source_id="2-CFR-200.205", section="200.205",
+                     regulation="2 CFR 200", last_revised="2024-04-22", tenant_id="t1"),
+        ]
+        status, reasons = compute_grounding_status(citations, 0.85, 0.90)
+        assert HumanReviewReason.AMENDMENT_SUPERSEDES in reasons
+        assert status == GroundingStatus.CITATION_CONFLICT, (
+            f"Expected CITATION_CONFLICT for amendment supersession, got {status}"
+        )
+
+    def test_cfr_vs_45cfr_different_sections_no_conflict(self):
+        # Different sections — no precedence conflict, no citation conflict
+        citations = [
+            Citation(chunk_id="c1", source_id="s1", section="200.205",
+                     regulation="2 CFR 200", tenant_id="t1"),
+            Citation(chunk_id="c2", source_id="s2", section="75.100",
+                     regulation="45 CFR 75", tenant_id="t1"),
+        ]
+        reason = _detect_precedence_conflict(citations)
+        assert reason is None
+
+    def test_far_not_in_grants_precedence_table(self):
+        # FAR removed from REGULATION_PRECEDENCE — precedence detector should not fire
+        # for a FAR-only citation set (no grants-domain cross-precedence conflict).
+        from app.services.grounding import REGULATION_PRECEDENCE
+        assert "FAR" not in REGULATION_PRECEDENCE
+        assert "DFARS" not in REGULATION_PRECEDENCE
 
 
 # ---------------------------------------------------------------------------

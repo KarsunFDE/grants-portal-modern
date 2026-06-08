@@ -476,7 +476,9 @@ A: Confidence threshold check in grounding.py before generation call.
    No silent retry. Every escalation creates a gate decision record.
 
 Thresholds by gate:
-   Gate 1: confidence >= 0.65, faithfulness >= 0.65
+   Gate 1: confidence >= 0.70, faithfulness >= 0.70
+            NOTE: must not be lowered below 0.70 without attached RAGAS eval evidence
+            showing acceptable pass-risk on a federal eligibility determination.
    Gate 2: N/A (rule-based, no confidence scoring)
    Gate 3: confidence >= 0.70, faithfulness >= 0.70
    Gate 4: confidence >= 0.70, faithfulness >= 0.70
@@ -962,7 +964,9 @@ Phase C — Corpus Ingestion (new data; no migration risk):
 Phase D — Application Cutover:
    1. Update MONGODB_URI environment variable to point to Atlas connection string
    2. Restart ai-orchestrator service
-   3. Smoke test: run /rag/clause-search and /check-eligibility; verify Atlas vector search active
+   3. Smoke test: POST /rag/v2/search and POST /check-eligibility; verify Atlas vector search active.
+      DO NOT use /rag/clause-search — that route returns a stub and would not constitute audit
+      evidence of Atlas retrieval. Only retrieval-backed endpoints provide meaningful cutover proof.
    4. Monitor: check Atlas metrics dashboard for connection count and query latency
    5. Keep original MongoDB running for 48h post-cutover as rollback target
 
@@ -1226,8 +1230,8 @@ ACCEPTANCE CRITERIA (RETRIEVAL LAYER)
        "Merit Review" and "merit review" produce the same cache key
    28. Static corpus confidence capped at 0.50 in _compute_confidence(); static hits never
        reported as high-confidence to gates
-   29. Gate 1 confidence threshold enforced at 0.65 (not 0.70); gate_id passed to grounding
-       check so gate-differentiated thresholds apply (Gate 1: 0.65; Gates 3/4: 0.70)
+   29. Gate 1 confidence and faithfulness thresholds are 0.70, same as Gates 3/4.
+       Threshold must not be lowered without RAGAS eval evidence (ADR 0009 §1 constraint).
    30. ragas added to requirements.txt and SME-labeled evaluation set present before Gate 1
        integration (hard gate; blocks AC #14)
 

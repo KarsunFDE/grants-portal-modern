@@ -118,6 +118,27 @@ def ensure_vector_index(db: Database) -> None:
 # Vector search
 # ---------------------------------------------------------------------------
 
+# Reserved system tenant — shared regulatory corpus only.
+# Must be the exact string used at ingestion; no alternate forms permitted.
+_GLOBAL_TENANT = "__global__"
+
+# Case-folded variants that must also be rejected at the request boundary.
+_RESERVED_TENANT_FORMS = {"__global__", "global", "GLOBAL", "__GLOBAL__"}
+
+
+def _reject_reserved_tenant(tenant_id: str) -> None:
+    """
+    Raise ValueError if the caller-supplied tenant_id is the reserved system marker.
+    A caller who supplies '__global__' is indistinguishable from the shared corpus
+    and could read all global chunks while bypassing normal tenant scoping.
+    """
+    if tenant_id.strip().lower() in {t.lower() for t in _RESERVED_TENANT_FORMS}:
+        raise ValueError(
+            f"tenant_id '{tenant_id}' is a reserved system value and cannot be used "
+            "as a caller tenant identifier. Supply an authority-issued tenant ID."
+        )
+
+
 def vector_search(
     query_text: str,
     tenant_id: str,
@@ -130,10 +151,12 @@ def vector_search(
     (2 CFR 200, 45 CFR 75) is always reachable regardless of caller tenant.
     ADR 0009 §6: '__global__' is the exact required string; no alternate forms.
 
-    Returns empty list on any error — caller falls through to Layer 2 (MongoDB text search).
+    Raises ValueError if tenant_id is the reserved '__global__' marker.
+    Returns empty list on any other error — caller falls through to Layer 2.
     On Bedrock embedding failure, logs bedrock_embedding_failed and skips vector search.
     ADR 0009 §4: never use zero vector as query input.
     """
+    _reject_reserved_tenant(tenant_id)
     if not ATLAS_RETRIEVAL_ENABLED:
         return []
     try:
@@ -176,8 +199,20 @@ def vector_search(
             },
         ]
         docs = list(db[COLLECTION].aggregate(pipeline))
-        return [
-            Citation(
+        results = []
+        for doc in docs:
+            doc_tenant = doc.get("tenant_id")
+            # Post-retrieval tenant guard — defence-in-depth beyond the Atlas pre-filter.
+            # Drop any document whose tenant_id is neither the caller's tenant nor the
+            # reserved global marker. A misconfigured index or filter bypass must not
+            # leak another tenant's chunks into the caller's result set.
+            if doc_tenant not in (tenant_id, _GLOBAL_TENANT):
+                log.error(
+                    "tenant_leak_detected chunk_id=%s doc_tenant=%s caller_tenant=%s — dropped",
+                    doc.get("chunk_id"), doc_tenant, tenant_id,
+                )
+                continue
+            results.append(Citation(
                 chunk_id=doc["chunk_id"],
                 source_id=doc["source_id"],
                 section=doc.get("section"),
@@ -185,12 +220,11 @@ def vector_search(
                 section_title=doc.get("section_title"),
                 last_revised=doc.get("last_revised"),
                 text_excerpt=doc.get("text_excerpt"),
-                tenant_id=doc.get("tenant_id", tenant_id),
+                tenant_id=doc_tenant,
                 regulation=doc.get("regulation"),
                 relevance_score=doc.get("score"),
-            )
-            for doc in docs
-        ]
+            ))
+        return results
     except Exception as exc:
         log.warning("Atlas vector_search failed (%s) — falling to Layer 2 (MongoDB text search)", exc)
         return []

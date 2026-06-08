@@ -47,16 +47,37 @@ log = logging.getLogger("ingest_corpus")
 # ADR 0009 §6: exact string required; no alternate forms ("global", "GLOBAL") permitted.
 GLOBAL_TENANT = "__global__"
 
-# Provenance defaults for static regulatory corpus (ADR 0009 §12).
-# Override via environment variables for other corpus sources.
+# ADR 0009 §12: content without provenance MUST NOT be indexed.
+# CORPUS_APPROVER_ID must be an explicit, real approver identifier — no default fallback.
+# Set via environment: CORPUS_APPROVER_ID=firstname.lastname@agency.gov
 INGESTION_ACTOR = os.getenv("INGESTION_ACTOR", "ingest_corpus.py")
-APPROVER_ID = os.getenv("CORPUS_APPROVER_ID", "regulatory-corpus-auto-approved")
+APPROVER_ID = os.getenv("CORPUS_APPROVER_ID", "")
 
 _REGULATION_SOURCE_URIS = {
     "2 CFR 200": "https://www.ecfr.gov/current/title-2/part-200",
     "45 CFR 75": "https://www.ecfr.gov/current/title-45/part-75",
     "NOFO": "agency-provided",
 }
+
+
+def _validate_provenance(doc: dict) -> None:
+    """
+    ADR 0009 §12: reject documents with missing or placeholder provenance before any upsert.
+    Aborts by raising ValueError — caller must not proceed with ingestion.
+    """
+    source_uri = doc.get("source_uri", "")
+    approver = doc.get("approver_id", "")
+    if not source_uri or source_uri == "unknown":
+        raise ValueError(
+            f"chunk_id={doc.get('chunk_id')}: source_uri is missing or 'unknown'. "
+            "Provide an explicit URI before indexing."
+        )
+    if not approver:
+        raise ValueError(
+            f"chunk_id={doc.get('chunk_id')}: approver_id is empty. "
+            "Set CORPUS_APPROVER_ID env var to an explicit approver identifier "
+            "(e.g. firstname.lastname@agency.gov)."
+        )
 
 # Regulatory seed corpus — embedded here so ingestion has no dependency on retrieval.py.
 # This is the authoritative source of truth for corpus content; retrieval.py no longer
@@ -122,13 +143,16 @@ _STATIC_CORPUS = [
 
 
 def build_document(entry: dict) -> dict:
+    """
+    Build a corpus document with provenance and embedding.
+    Raises ValueError if provenance is missing (ADR 0009 §12).
+    Raises RuntimeError if Bedrock embedding fails (ADR 0009 §4).
+    get_embedding already raises on failure — never returns a zero vector.
+    """
     text = entry["text_excerpt"]
-    log.info("Embedding %s ...", entry["source_id"])
-    embedding = get_embedding(text)
-    source_checksum = hashlib.sha256(text.encode()).hexdigest()
     regulation = entry.get("regulation", "")
     source_uri = _REGULATION_SOURCE_URIS.get(regulation, "unknown")
-    return {
+    doc = {
         "chunk_id": entry["chunk_id"],
         "source_id": entry["source_id"],
         "section": entry.get("section"),
@@ -138,11 +162,15 @@ def build_document(entry: dict) -> dict:
         "tenant_id": GLOBAL_TENANT,
         "embedding_model_version": EMBEDDING_MODEL_ID,
         "source_uri": source_uri,
-        "source_checksum": source_checksum,
+        "source_checksum": hashlib.sha256(text.encode()).hexdigest(),
         "approver_id": APPROVER_ID,
         "ingestion_actor": INGESTION_ACTOR,
-        "embedding": embedding,
     }
+    # Provenance gate — reject before any embedding call or upsert.
+    _validate_provenance(doc)
+    log.info("Embedding %s ...", entry["source_id"])
+    doc["embedding"] = get_embedding(text)
+    return doc
 
 
 def ingest() -> None:
@@ -151,10 +179,22 @@ def ingest() -> None:
     log.info("Ensuring Atlas vector search index ...")
     ensure_vector_index(db)
 
-    log.info("Ingesting %d corpus chunks into %s ...", len(_STATIC_CORPUS), COLLECTION)
-    inserted = updated = 0
+    # ADR 0009 §12: pre-build ALL documents before any upsert.
+    # A failure in provenance validation or Bedrock embedding aborts the entire run;
+    # no partial corpus is written to Atlas.
+    log.info("Building and embedding %d corpus chunks (pre-flight) ...", len(_STATIC_CORPUS))
+    docs = []
     for entry in _STATIC_CORPUS:
-        doc = build_document(entry)
+        try:
+            docs.append(build_document(entry))
+        except (ValueError, RuntimeError) as exc:
+            log.error("INGESTION ABORTED — provenance/embedding failure for %s: %s",
+                      entry.get("source_id", "unknown"), exc)
+            sys.exit(1)
+
+    log.info("All %d documents validated and embedded. Upserting to %s ...", len(docs), COLLECTION)
+    inserted = updated = 0
+    for doc in docs:
         result = db[COLLECTION].replace_one(
             {"chunk_id": doc["chunk_id"]},
             doc,

@@ -168,7 +168,7 @@ class GroundedResponse(BaseModel):
     escalation_id: Optional[str] = None
     ai_run_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     # ADR 0009 §10 — audit replay fields
-    retrieval_strategy: Optional[str] = None   # "hybrid" | "dense" | "sparse" | "static"
+    retrieval_strategy: Optional[str] = None   # "atlas" | "mongodb_text" | "static" | "cache"
     corpus_version: Optional[str] = None
     cache_hit: bool = False
 

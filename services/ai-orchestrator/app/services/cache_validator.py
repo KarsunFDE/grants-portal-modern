@@ -57,19 +57,26 @@ def validate_before_generation(
     if not citations:
         reasons.append(HumanReviewReason.MISSING_CITATIONS)
     else:
-        # Corpus existence check.
-        # Discriminate by relevance_score rather than by retrieval_strategy:
-        #   - Atlas citations: relevance_score is set (populated from vectorSearchScore)
-        #   - Layer-2 citations from clause_library: relevance_score is None
-        # This is strategy-agnostic and works correctly for cache hits regardless of
-        # whether the stored strategy field is present or is None (old entries).
-        atlas_citations = [c for c in citations if c.relevance_score is not None]
-        if atlas_citations:
+        # Corpus existence check gated on retrieval_strategy.
+        # Discriminator: the stored retrieval_strategy field (set at cache-write time).
+        #   - "atlas": citations come from corpus_chunks; verify chunk_ids still exist.
+        #   - "mongodb_text" / "static": citations from clause_library or static corpus;
+        #     not in corpus_chunks; existence check would always report them missing.
+        #   - None / unknown: strategy metadata absent (pre-PR cache entry or corruption).
+        #     Fail closed — do not serve stale cache output without knowing its origin.
+        #
+        # The prior approach (discriminate by relevance_score presence) silently skipped
+        # the existence check for Atlas cache entries written before relevance_score was
+        # added, allowing stale/deleted chunk_ids to pass revalidation.
+        if retrieval_strategy is None:
+            log.warning("cache_validator: retrieval_strategy absent — failing closed on cache entry")
+            reasons.append(HumanReviewReason.CACHE_REVALIDATION_FAILED)
+        elif retrieval_strategy == "atlas":
             try:
                 from app.atlas_search import get_atlas_db, ATLAS_RETRIEVAL_ENABLED, COLLECTION
                 if ATLAS_RETRIEVAL_ENABLED:
                     db = get_atlas_db()
-                    chunk_ids = [c.chunk_id for c in atlas_citations]
+                    chunk_ids = [c.chunk_id for c in citations]
                     existing = {
                         doc["chunk_id"]
                         for doc in db[COLLECTION].find(
@@ -83,6 +90,7 @@ def validate_before_generation(
                         reasons.append(HumanReviewReason.MISSING_CITATIONS)
             except Exception as exc:
                 log.debug("citation existence check skipped: %s", exc)
+        # "mongodb_text" and "static" strategies: skip corpus_chunks existence check
 
     if confidence_score < conf_threshold:
         reasons.append(HumanReviewReason.LOW_CONFIDENCE)

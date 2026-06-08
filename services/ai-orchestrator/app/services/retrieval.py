@@ -32,32 +32,34 @@ CACHE_TTL_HOURS = 24
 
 def _filter_superseded_amendments(citations: List[Citation]) -> List[Citation]:
     """
-    ADR 0009 §11: when the same source_id appears with multiple last_revised dates,
-    keep only the newest revision. Older versions are superseded amendments.
+    ADR 0009 §11: when the same source_id has chunks at multiple last_revised dates,
+    keep ALL chunks whose revision matches the latest date for that source_id.
+
+    Keying only on source_id (prior bug) collapsed multiple valid sections/subsections
+    from the same source down to a single chunk, losing all co-resident citations.
+    Fix: determine the latest revision date per source_id, then retain every chunk
+    that belongs to that revision — not just one representative chunk.
     """
-    latest: dict = {}
+    latest_date: dict = {}
     for c in citations:
-        if not c.source_id:
+        if not c.source_id or not c.last_revised:
             continue
-        existing = latest.get(c.source_id)
-        if existing is None:
-            latest[c.source_id] = c
-        elif c.last_revised and existing.last_revised:
-            if c.last_revised > existing.last_revised:
-                latest[c.source_id] = c
-        elif c.last_revised and not existing.last_revised:
-            latest[c.source_id] = c
-    # Preserve original ordering for sources not in latest (no source_id) + deduplicated set
-    seen: set = set()
+        existing = latest_date.get(c.source_id)
+        if existing is None or c.last_revised > existing:
+            latest_date[c.source_id] = c.last_revised
+
     result: List[Citation] = []
     for c in citations:
         if not c.source_id:
             result.append(c)
             continue
-        best = latest.get(c.source_id)
-        if c.source_id not in seen and best is not None and best.chunk_id == c.chunk_id:
-            seen.add(c.source_id)
+        best_date = latest_date.get(c.source_id)
+        if best_date is None:
+            # source has no dated citations — keep all undated chunks for this source
             result.append(c)
+        elif c.last_revised is None or c.last_revised == best_date:
+            result.append(c)
+        # else: older revision — drop
     return result
 
 

@@ -172,6 +172,101 @@ class TestCacheInvalidation:
         assert result is None
 
 
+class TestTenantIsolation:
+    """
+    REQ-RAG-3: tenant isolation proven by test.
+
+    The $vectorSearch filter must scope results to [request_tenant_id, "__global__"].
+    Tenant B's chunks must be unreachable from Tenant A's query.
+    Callers must not be able to supply "__global__" as their tenant_id.
+    """
+
+    def test_vector_search_filter_scopes_to_caller_and_global(self):
+        """vector_search builds a filter containing [tenant_id, '__global__'] only."""
+        from unittest.mock import MagicMock, patch
+        import app.atlas_search as atlas_mod
+
+        captured_pipelines = []
+
+        def fake_aggregate(pipeline):
+            captured_pipelines.append(pipeline)
+            return iter([])
+
+        fake_collection = MagicMock()
+        fake_collection.aggregate.side_effect = fake_aggregate
+        fake_db = MagicMock()
+        fake_db.__getitem__.return_value = fake_collection
+
+        with (
+            patch.object(atlas_mod, "get_atlas_db", return_value=fake_db),
+            patch.object(atlas_mod, "get_embedding", return_value=[0.1] * 1024),
+            patch.object(atlas_mod, "ATLAS_RETRIEVAL_ENABLED", True),
+        ):
+            atlas_mod.vector_search("merit review", tenant_id="tenant-A")
+
+        assert captured_pipelines, "aggregate was not called"
+        vs_stage = captured_pipelines[0][0]["$vectorSearch"]
+        tenant_filter = vs_stage["filter"]["tenant_id"]["$in"]
+        assert "tenant-A" in tenant_filter
+        assert "__global__" in tenant_filter
+        assert len(tenant_filter) == 2, (
+            f"Expected exactly [tenant-A, __global__] in filter; got {tenant_filter}"
+        )
+
+    def test_tenant_b_chunks_not_returned_for_tenant_a_query(self):
+        """Atlas aggregation result for tenant-A must not include tenant-B docs."""
+        from unittest.mock import MagicMock, patch
+        import app.atlas_search as atlas_mod
+        from app.schemas.hitl import Citation
+
+        tenant_b_doc = {
+            "chunk_id": "b-chunk-1",
+            "source_id": "NOFO-tenant-B",
+            "section": "3.1",
+            "subsection": None,
+            "section_title": None,
+            "last_revised": "2024-01-01",
+            "text_excerpt": "Tenant B confidential NOFO content.",
+            "regulation": "NOFO",
+            "tenant_id": "tenant-B",   # wrong tenant
+            "score": 0.99,
+        }
+        # Atlas pre-filter should prevent this from being returned; simulate a bypass
+        # to verify the post-retrieval tenant guard in vector_search also catches it.
+        fake_collection = MagicMock()
+        fake_collection.aggregate.return_value = iter([tenant_b_doc])
+        fake_db = MagicMock()
+        fake_db.__getitem__.return_value = fake_collection
+
+        with (
+            patch.object(atlas_mod, "get_atlas_db", return_value=fake_db),
+            patch.object(atlas_mod, "get_embedding", return_value=[0.1] * 1024),
+            patch.object(atlas_mod, "ATLAS_RETRIEVAL_ENABLED", True),
+        ):
+            results = atlas_mod.vector_search("merit review", tenant_id="tenant-A")
+
+        chunk_ids = [c.chunk_id for c in results]
+        assert "b-chunk-1" not in chunk_ids, (
+            "Tenant B chunk must not appear in tenant A query results"
+        )
+
+    def test_reserved_global_tenant_rejected_at_vector_search(self):
+        """Supplying '__global__' as caller tenant_id must raise ValueError."""
+        import app.atlas_search as atlas_mod
+        import pytest
+
+        with pytest.raises(ValueError, match="reserved system value"):
+            atlas_mod.vector_search("any query", tenant_id="__global__")
+
+    def test_reserved_tenant_variants_rejected(self):
+        """Case/whitespace variants of the reserved marker are also rejected."""
+        import app.atlas_search as atlas_mod
+
+        for bad_tenant in ["global", "GLOBAL", "__GLOBAL__"]:
+            with pytest.raises(ValueError):
+                atlas_mod.vector_search("query", tenant_id=bad_tenant)
+
+
 class TestRAGV2Endpoints:
     def test_search_returns_grounded_response(self, client):
         resp = client.post("/rag/v2/search", json={
