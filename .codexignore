@@ -1,0 +1,6 @@
+# Files and directories excluded from Codex automated review.
+# Scenario ADRs are deliberate research/classroom exercises written in response
+# to specific prompts from the delivery lead. They describe hypothetical or
+# domain-adjacent systems and are NOT production design decisions for this repo.
+# Reviewing them against the project codebase produces false findings.
+docs/adrs/scenarios/
