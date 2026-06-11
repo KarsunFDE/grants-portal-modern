@@ -204,32 +204,79 @@ prompt template versioning in Decision 4 (workflow-run scope) becomes fully reli
 the migration is complete; pre-migration `ai_run_id` records should be flagged with
 `prompt_template_version = "legacy_chain_v0"` for audit distinguishability.
 
+### 13. Orchestration framework: LangGraph (REQ-MOD-2)
+
+Use **LangGraph** as the orchestration framework for the multi-gate agentic workflow. This decision satisfies REQ-AGT-3 (durable pause/resume) and REQ-AGT-1 (multi-agent panel) in a way that plain LangChain LCEL cannot.
+
+**Rationale over LCEL-only:**
+- LangGraph provides built-in `interrupt()` for HITL pause — required for gates with up-to-10-business-day SLAs that outlast any in-process state
+- LangGraph's checkpointer persists the full graph state (gate states, loop counts, evidence snapshot) to MongoDB, surviving restarts and redeploys
+- Conditional edges natively express APPROVE/REJECT/RETURN_FOR_FIXES routing without ad-hoc `if/else` in handler code
+- Multi-agent panel (reviewer-assignment + COI + panel-confirmation) maps directly to LangGraph multi-node subgraph
+
+**Dependency pin** (add to `services/ai-orchestrator/requirements.txt`):
+```
+langgraph>=0.2.0
+langchain-aws>=0.2.0
+langgraph-checkpoint-mongodb>=0.1.0
+```
+
+**Checkpointer:** `MongoDBSaver` keyed by `thread_id = workflow_run_id`. Full `WorkflowState` schema and resume pattern defined in `docs/specs/agentic-workflow/orchestration.md §2`.
+
+### 14. Idempotency key: per-invocation composite (REQ-MED-1)
+
+Single `ai_run_id` minted at intake is not a valid idempotency key across stages. Adopt a per-invocation composite key:
+
+```python
+idempotency_key = sha256(
+    f"{workflow_run_id}|{stage}|{gate_id or ''}|{attempt}|"
+    f"{prompt_template_version}|{corpus_version}|{input_hash}"
+)
+```
+
+`ai_run_id` remains a UUID v4 display/audit field, unique per invocation. The composite key is the dedup key. Full design in `docs/specs/agentic-workflow/orchestration.md §4`.
+
+### 15. revision_loop_count: durable, concurrency-safe (REQ-MED-2)
+
+Store `revision_loop_counts` in `WorkflowState` (LangGraph checkpoint, MongoDB-backed), keyed by `f"{gate_id}:{reviewer_id}"`. Enforce cap via atomic conditional update in the LangGraph node — not in Redis with a TTL. Full design in `docs/specs/agentic-workflow/orchestration.md §5`.
+
 ## Consequences
 
 Positive:
 - End-to-end workflow contract is fully specified; no ambiguity on branching, context scope, or error path
-- Idempotency prevents duplicate Bedrock invocations on retry
+- LangGraph checkpointer provides durable pause/resume satisfying 10-business-day gate SLAs
+- Composite idempotency key prevents cross-stage cache collisions
+- Revision loop cap is durable and concurrency-safe
 - SLA timers prevent gates from blocking indefinitely without accountability
 - Prompt injection defense is layered and auditable
-- Amendment and QA workflows share infrastructure but have clearly defined gate requirements
+- QA two-tier split eliminates 2 CFR 200.205/200.206 exposure for decision-adjacent questions
 
 Tradeoffs:
-- Revision loop cap requires additional loop-count state in conversation scope
-- Three-tier context scoping adds storage and TTL management complexity
+- LangGraph adds a new dependency and requires MongoDB checkpointer setup
+- Composite idempotency key requires input hashing at each invocation
 - Parallel intake execution requires async coordination at the service layer
 - SLA timer implementation requires a background job or event scheduler
 
 ## Rollout
 
-1. Implement `idempotency_store.check(ai_run_id)` before all `bedrock_client.invoke_model()` calls
-2. Add `revision_loop_count` to conversation-scope context; enforce cap of 3 with escalation on breach
-3. Add intake triage AI call before Gate 1 evidence assembly; inject `IntakeTriageResult` into Gate 1 payload
-4. Implement system-turn fence instruction in all Bedrock prompt builders
-5. Enforce top-K = 5 chunk cap and 8,000-token `raw_text` truncation in retrieval pipeline
-6. Run `retrieval_service.retrieve()` and `validate_before_generation()` concurrently at intake
-7. Implement SLA timer triggers and auto-escalation for all five gate timeouts
-8. Add `AmendmentRequest` and `QARequest` routes with their respective audit paths
-9. Flag `legacy_chain.py` `ai_run_id` records with `prompt_template_version = "legacy_chain_v0"` pre-W2
+1. Pin `langgraph>=0.2.0`, `langgraph-checkpoint-mongodb>=0.1.0` in `requirements.txt`
+2. Define `WorkflowState` TypedDict and compile `MongoDBSaver` checkpointer
+3. Replace direct `invoke_model()` calls with LangGraph nodes; wire conditional edges for gate decisions
+4. Implement per-invocation composite idempotency key; replace `ai_run_id` dedup with composite key store
+5. Move `revision_loop_counts` from Redis to `WorkflowState`; enforce cap via LangGraph conditional edge
+6. Wire intake triage as mandatory pre-Gate-1 LangGraph node; inject `IntakeTriageResult` into Gate 1 state
+7. Implement system-turn fence instruction in all Bedrock prompt builders
+8. Enforce top-K = 5 chunk cap and 8,000-token `raw_text` truncation in retrieval pipeline
+9. At intake: run pre-retrieval injection defense CONCURRENTLY with retrieval; run `validate_before_generation()` ONLY AFTER retrieval outputs exist
+10. Implement SLA timer triggers as LangGraph scheduled interrupts; auto-escalation on breach
+11. Add `AmendmentRequest` and QA two-tier routes with their respective audit paths
+12. Fix `/answer-qa` prompt injection gap (Item 9 in main.py) before production
+13. Derive `tenant_id` from auth principal; reject body-supplied tenant overrides
+14. Implement multi-agent COI panel subgraph (`docs/specs/agentic-workflow/design-reference.md §8`)
+15. Implement prior-award PI knowledge graph and duplicate-funding check (`docs/specs/agentic-workflow/design-reference.md §9`)
+16. Align `grounding.py` thresholds (done — CONFIDENCE_PROCEED=0.80, FAITHFULNESS_THRESHOLD=0.70; see `design-reference.md §3`)
+17. Add acceptance tests AT-01 through AT-16 (`docs/specs/agentic-workflow/acceptance-tests.md`)
+18. Flag `legacy_chain.py` records with `prompt_template_version = "legacy_chain_v0"` pre-W2
 
 ## Non-goals
 

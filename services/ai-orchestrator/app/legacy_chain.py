@@ -69,4 +69,3 @@ def draft_with_legacy_chain(topic: str, constraints: str | None, llm: Any) -> st
 
     log.info("legacy_chain ran (Item 5 — to migrate in W2)")
     return result
-1
