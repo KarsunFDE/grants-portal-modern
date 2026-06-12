@@ -185,6 +185,12 @@ class GateDecisionRecord(BaseModel):
     citation_refs: List[str] = Field(default_factory=list)
     confidence_score: float = Field(ge=0.0, le=1.0, default=0.0)
     grounding_status: GroundingStatus = GroundingStatus.UNGROUNDED
+    # Audit replay fields (ADR 0009 §10) — required for post-award audit reconstruction
+    retrieval_filter: Optional[Dict] = None
+    pre_rerank_candidates: List[str] = Field(default_factory=list)
+    post_rerank_candidates: List[str] = Field(default_factory=list)
+    reranker_model_id: Optional[str] = None
+    prompt_template_version: Optional[str] = None
 
     @model_validator(mode="after")
     def _validate_decision_allowed(self) -> "GateDecisionRecord":
