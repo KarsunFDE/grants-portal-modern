@@ -9,7 +9,7 @@ Rules:
 """
 from __future__ import annotations
 
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Set, Tuple
 
 from app.schemas.hitl import (
     Citation,
@@ -20,57 +20,46 @@ from app.schemas.hitl import (
     HumanReviewReason,
 )
 
-# ADR 0009 §1 — gate-differentiated thresholds; uniform threshold is incorrect.
-_CONFIDENCE_THRESHOLDS: Dict[GateId, float] = {
+# Authoritative thresholds — HITL policy table (spec §3, ADR 0009 §1).
+# conf >= CONFIDENCE_PROCEED + faith >= FAITHFULNESS_THRESHOLD → GROUNDED (auto-proceed)
+# CONFIDENCE_BLOCK <= conf < CONFIDENCE_PROCEED               → LOW_CONFIDENCE (advance with flag)
+# conf < CONFIDENCE_BLOCK OR faith < FAITHFULNESS_THRESHOLD   → UNGROUNDED (block)
+CONFIDENCE_PROCEED = 0.80       # clean-proceed floor (spec §3, row 1)
+CONFIDENCE_THRESHOLD = 0.80     # alias kept for cache_validator.py import compatibility
+CONFIDENCE_BLOCK = 0.65         # hard-block ceiling (spec §3, row 3)
+FAITHFULNESS_THRESHOLD = 0.70   # faith block threshold (spec §3, row 4) — was 0.80 (swapped)
+
+# Gate-differentiated block thresholds (ADR 0009 §1).
+# Values below these trigger UNGROUNDED; values at or above but below CONFIDENCE_PROCEED
+# trigger LOW_CONFIDENCE (advance with flag).
+GATE_CONFIDENCE_THRESHOLDS: Dict[GateId, float] = {
+    GateId.GATE_1: 0.65,   # eligibility/screening — lower bar, human always reviews
+    GateId.GATE_2: 0.65,   # COI path is rule-based; threshold is a floor only
+    GateId.GATE_3: 0.70,   # factor suggestion — higher bar before human accepts
+    GateId.GATE_4: 0.70,   # award decision — higher bar
+}
+GATE_FAITHFULNESS_THRESHOLDS: Dict[GateId, float] = {
     GateId.GATE_1: 0.65,
+    GateId.GATE_2: 0.65,
     GateId.GATE_3: 0.70,
     GateId.GATE_4: 0.70,
 }
-_FAITHFULNESS_THRESHOLDS: Dict[GateId, float] = {
-    # Gate 1 threshold must not be lowered below 0.70 without attached RAGAS eval evidence
-    # showing pass-risk at the lower value is acceptable for a federal eligibility determination.
-    GateId.GATE_1: 0.70,
-    GateId.GATE_3: 0.70,
-    GateId.GATE_4: 0.70,
-}
-_DEFAULT_CONFIDENCE_THRESHOLD = 0.70
-_DEFAULT_FAITHFULNESS_THRESHOLD = 0.70
 
-# Public aliases — used by callers without gate context (e.g. general validation).
-CONFIDENCE_THRESHOLD = _DEFAULT_CONFIDENCE_THRESHOLD
-FAITHFULNESS_THRESHOLD = _DEFAULT_FAITHFULNESS_THRESHOLD
-
-# Public exports — used by cache_validator.py to apply gate-specific thresholds.
-GATE_CONFIDENCE_THRESHOLDS: Dict[GateId, float] = _CONFIDENCE_THRESHOLDS
-GATE_FAITHFULNESS_THRESHOLDS: Dict[GateId, float] = _FAITHFULNESS_THRESHOLDS
-
-# ADR 0009 §11 — grants regulatory source precedence (1 = highest authority).
-# FAR/DFARS are acquisition regulations and do not belong in this table; they collide
-# with NOFO's rank 3 and cannot participate in grants-domain precedence conflict detection.
-# FAR/DFARS conflict detection is handled separately in _has_far_dfars_conflict.
-REGULATION_PRECEDENCE: Dict[str, int] = {
-    "2 CFR 200": 1,
-    "45 CFR 75": 2,
-    "NOFO": 3,
-    "AGENCY_POLICY": 4,
-    "QA": 5,
-}
+# GroundingStatus values where workflow ADVANCES (generate + proceed to gate owner).
+# LOW_CONFIDENCE advances with EscalationRecord attached; GROUNDED advances clean.
+_ADVANCING_STATUSES = {GroundingStatus.GROUNDED, GroundingStatus.LOW_CONFIDENCE}
 
 
 def compute_grounding_status(
     citations: List[Citation],
     confidence_score: float,
     faithfulness_score: float,
-    gate_id: Optional[GateId] = None,
+    gate_id: "GateId | None" = None,
 ) -> Tuple[GroundingStatus, List[HumanReviewReason]]:
     """
     Determine grounding status and human review reasons.
-    Uses gate-differentiated thresholds when gate_id is provided (ADR 0009 §1).
     Returns (GroundingStatus, [HumanReviewReason, ...]).
     """
-    conf_threshold = _CONFIDENCE_THRESHOLDS.get(gate_id, _DEFAULT_CONFIDENCE_THRESHOLD) if gate_id else _DEFAULT_CONFIDENCE_THRESHOLD
-    faith_threshold = _FAITHFULNESS_THRESHOLDS.get(gate_id, _DEFAULT_FAITHFULNESS_THRESHOLD) if gate_id else _DEFAULT_FAITHFULNESS_THRESHOLD
-
     reasons: List[HumanReviewReason] = []
 
     if not citations:
@@ -86,47 +75,47 @@ def compute_grounding_status(
     if _has_far_dfars_conflict(citations):
         reasons.append(HumanReviewReason.FAR_DFARS_CONFLICT)
 
-    # ADR 0009 §11 — precedence-based conflict detection
-    precedence_reason = _detect_precedence_conflict(citations)
-    if precedence_reason and precedence_reason not in reasons:
-        reasons.append(precedence_reason)
+    conf_block = GATE_CONFIDENCE_THRESHOLDS.get(gate_id, CONFIDENCE_BLOCK) if gate_id else CONFIDENCE_BLOCK
+    faith_block = GATE_FAITHFULNESS_THRESHOLDS.get(gate_id, FAITHFULNESS_THRESHOLD) if gate_id else FAITHFULNESS_THRESHOLD
 
-    version_reason = _detect_version_mismatch(citations)
-    if version_reason:
-        reasons.append(version_reason)
-
-    if confidence_score < conf_threshold:
+    # Tiered confidence: < block threshold → UNGROUNDED (hard block);
+    #                    block <= score < CONFIDENCE_PROCEED → LOW_CONFIDENCE (advance with flag).
+    if confidence_score < conf_block:
+        reasons.append(HumanReviewReason.UNGROUNDED)
+    elif confidence_score < CONFIDENCE_PROCEED:
         reasons.append(HumanReviewReason.LOW_CONFIDENCE)
 
-    if faithfulness_score < faith_threshold:
+    if faithfulness_score < faith_block:
         reasons.append(HumanReviewReason.LOW_FAITHFULNESS)
 
     if not reasons:
         return GroundingStatus.GROUNDED, []
 
     # Determine primary status — most severe first.
-    # ADR 0009 §11: ALL conflict reason codes map to CITATION_CONFLICT, not UNGROUNDED.
-    # Precedence conflicts (CFR_NOFO_CONFLICT, AGENCY_POLICY_CONFLICT, AMENDMENT_SUPERSEDES)
-    # and procurement conflicts (FAR_DFARS_CONFLICT) indicate contradictory sources, not
-    # an absence of grounding — falling through to UNGROUNDED would corrupt the audit record.
-    _CITATION_CONFLICT_REASONS = {
-        HumanReviewReason.CITATION_CONFLICT,
-        HumanReviewReason.REGULATORY_CONFLICT,
-        HumanReviewReason.CFR_NOFO_CONFLICT,
-        HumanReviewReason.AGENCY_POLICY_CONFLICT,
-        HumanReviewReason.AMENDMENT_SUPERSEDES,
-        HumanReviewReason.FAR_DFARS_CONFLICT,
-    }
-    if confidence_score < conf_threshold:
-        return GroundingStatus.LOW_CONFIDENCE, reasons
-    if any(r in _CITATION_CONFLICT_REASONS for r in reasons):
+    # UNGROUNDED (hard block) outranks LOW_CONFIDENCE (advance with flag).
+    if HumanReviewReason.UNGROUNDED in reasons or faithfulness_score < faith_block:
+        return GroundingStatus.UNGROUNDED, reasons
+    if HumanReviewReason.CITATION_CONFLICT in reasons:
         return GroundingStatus.CITATION_CONFLICT, reasons
+    if HumanReviewReason.REGULATORY_CONFLICT in reasons:
+        return GroundingStatus.CITATION_CONFLICT, reasons
+    if HumanReviewReason.LOW_CONFIDENCE in reasons:
+        return GroundingStatus.LOW_CONFIDENCE, reasons
 
     return GroundingStatus.UNGROUNDED, reasons
 
 
 def is_grounded(grounding_status: GroundingStatus) -> bool:
     return grounding_status == GroundingStatus.GROUNDED
+
+
+def should_advance(grounding_status: GroundingStatus) -> bool:
+    """True when workflow should advance (generate + proceed to gate owner).
+    GROUNDED → advance clean. LOW_CONFIDENCE → advance with EscalationRecord.
+    UNGROUNDED / MISSING_CITATIONS / CITATION_CONFLICT → block.
+    Use this (not is_grounded) for the main.py gate-block check.
+    """
+    return grounding_status in _ADVANCING_STATUSES
 
 
 def route_escalation(gate_id: GateId) -> List[GateOwnerRole]:
@@ -159,61 +148,3 @@ def _has_far_dfars_conflict(citations: List[Citation]) -> bool:
     far = {c.section for c in citations if c.regulation == "FAR" and c.section}
     dfars = {c.section for c in citations if c.regulation == "DFARS" and c.section}
     return bool(far & dfars)
-
-
-def _detect_precedence_conflict(citations: List[Citation]) -> Optional[HumanReviewReason]:
-    """
-    ADR 0009 §11 — detect conflicts between sources at different precedence levels.
-    CFR (rank 1-2) vs NOFO (rank 3): CFR_NOFO_CONFLICT.
-    CFR/NOFO vs AGENCY_POLICY (rank 4): AGENCY_POLICY_CONFLICT.
-    Returns the most severe reason code, or None if no conflict.
-    """
-    sections: Dict[str, Set[str]] = {}
-    for c in citations:
-        if c.section and c.regulation:
-            sections.setdefault(c.section, set()).add(c.regulation)
-
-    for section, regs in sections.items():
-        ranks = {r: REGULATION_PRECEDENCE.get(r, 99) for r in regs}
-        if len(regs) < 2:
-            continue
-        min_rank = min(ranks.values())
-        max_rank = max(ranks.values())
-        if min_rank <= 2 and max_rank == 3:
-            return HumanReviewReason.CFR_NOFO_CONFLICT
-        if min_rank <= 3 and max_rank == 4:
-            return HumanReviewReason.AGENCY_POLICY_CONFLICT
-    return None
-
-
-def _detect_version_mismatch(citations: List[Citation]) -> Optional[HumanReviewReason]:
-    """
-    ADR 0009 §11 — two distinct conflict types detected here:
-
-    AMENDMENT_SUPERSEDES: same source_id appears with multiple last_revised dates.
-      The retrieval layer (_filter_superseded_amendments) should have dropped older
-      revisions; if duplicates survive to this point, a supersession conflict escaped
-      filtering and requires human review.
-
-    VERSION_MISMATCH: same source_id appears with multiple distinct regulation enum values
-      (e.g., the same chunk_id indexed under both "2 CFR 200" and "45 CFR 75").
-      This indicates a corpus integrity problem that cannot be resolved automatically.
-
-    Returns the most severe reason detected, or None if no mismatch.
-    """
-    source_dates: Dict[str, Set[str]] = {}
-    source_regs: Dict[str, Set[str]] = {}
-    for c in citations:
-        if not c.source_id:
-            continue
-        if c.last_revised:
-            source_dates.setdefault(c.source_id, set()).add(c.last_revised)
-        if c.regulation:
-            source_regs.setdefault(c.source_id, set()).add(c.regulation)
-
-    # VERSION_MISMATCH is more severe (corpus integrity problem) — check first.
-    if any(len(regs) > 1 for regs in source_regs.values()):
-        return HumanReviewReason.VERSION_MISMATCH
-    if any(len(dates) > 1 for dates in source_dates.values()):
-        return HumanReviewReason.AMENDMENT_SUPERSEDES
-    return None

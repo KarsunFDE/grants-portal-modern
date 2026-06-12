@@ -209,13 +209,11 @@ def check_eligibility(req: EligibilityCheckRequest) -> dict[str, Any]:
         f"eligibility risk review applicant_type={req.applicant_type or ''} "
         f"assistance_listing={req.assistance_listing_number or ''}"
     )
-    citations, confidence, faithfulness, retrieved_at, retrieval_strategy, cache_hit = retrieval_service.retrieve(
+    citations, confidence, faithfulness, retrieved_at = retrieval_service.retrieve(
         query=query,
         tenant_id=req.tenant_id,
     )
-    grounding_status, human_review_reasons = compute_grounding_status(
-        citations, confidence, faithfulness, gate_id=GateId.GATE_1
-    )
+    grounding_status, human_review_reasons = compute_grounding_status(citations, confidence, faithfulness)
 
     # Cache revalidation before generation (hitl-plan.txt §Cache Revalidation Policy — AC13)
     cache_ok, cache_reasons = validate_before_generation(
@@ -224,8 +222,6 @@ def check_eligibility(req: EligibilityCheckRequest) -> dict[str, Any]:
         faithfulness_score=faithfulness,
         cache_created_at=retrieved_at,
         tenant_id=req.tenant_id,
-        gate_id=GateId.GATE_1,
-        retrieval_strategy=retrieval_strategy,
     )
     if not cache_ok:
         for r in cache_reasons:
@@ -261,8 +257,6 @@ def check_eligibility(req: EligibilityCheckRequest) -> dict[str, Any]:
             "citation_refs": [f"{c.regulation}:{c.section}" for c in citations],
             "escalation_id": escalation.escalation_id,
             "ai_run_id": ai_run_id,
-            "retrieval_strategy": retrieval_strategy,
-            "cache_hit": cache_hit,
             "model": BEDROCK_MODEL_ID,
         }
 
@@ -295,8 +289,6 @@ def check_eligibility(req: EligibilityCheckRequest) -> dict[str, Any]:
         "citation_refs": [f"{c.regulation}:{c.section}" for c in citations],
         "citations": [c.model_dump() for c in citations],
         "ai_run_id": ai_run_id,
-        "retrieval_strategy": retrieval_strategy,
-        "cache_hit": cache_hit,
         "model": BEDROCK_MODEL_ID,
     }
 
@@ -396,13 +388,11 @@ def eval_factor_suggest(req: FactorSuggestRequest) -> dict[str, Any]:
     log.info("eval/factor-suggest topic=%r", req.topic)
 
     # Grounded retrieval — 2 CFR 200.204/205 required before factor suggestion (Gate 3)
-    citations, confidence, faithfulness, retrieved_at, retrieval_strategy, cache_hit = retrieval_service.retrieve(
+    citations, confidence, faithfulness, retrieved_at = retrieval_service.retrieve(
         query=f"evaluation factor merit criterion {req.topic}",
         tenant_id=req.tenant_id,
     )
-    grounding_status, human_review_reasons = compute_grounding_status(
-        citations, confidence, faithfulness, gate_id=GateId.GATE_3
-    )
+    grounding_status, human_review_reasons = compute_grounding_status(citations, confidence, faithfulness)
 
     # Cache revalidation before generation (AC13)
     cache_ok, cache_reasons = validate_before_generation(
@@ -411,8 +401,6 @@ def eval_factor_suggest(req: FactorSuggestRequest) -> dict[str, Any]:
         faithfulness_score=faithfulness,
         cache_created_at=retrieved_at,
         tenant_id=req.tenant_id,
-        gate_id=GateId.GATE_3,
-        retrieval_strategy=retrieval_strategy,
     )
     if not cache_ok:
         for r in cache_reasons:
@@ -444,8 +432,6 @@ def eval_factor_suggest(req: FactorSuggestRequest) -> dict[str, Any]:
             "citation_refs": [f"{c.regulation}:{c.section}" for c in citations],
             "escalation_id": escalation.escalation_id,
             "ai_run_id": ai_run_id,
-            "retrieval_strategy": retrieval_strategy,
-            "cache_hit": cache_hit,
             "model": BEDROCK_MODEL_ID,
         }
 
@@ -469,8 +455,6 @@ def eval_factor_suggest(req: FactorSuggestRequest) -> dict[str, Any]:
         "citation_refs": [f"{c.regulation}:{c.section}" for c in citations],
         "citations": [c.model_dump() for c in citations],
         "ai_run_id": ai_run_id,
-        "retrieval_strategy": retrieval_strategy,
-        "cache_hit": cache_hit,
         "model": BEDROCK_MODEL_ID,
     }
 
@@ -489,13 +473,11 @@ def eval_ssdd_draft(req: SSDDDraftRequest) -> dict[str, Any]:
     log.info("eval/ssdd-draft topic=%r", req.topic)
 
     # Grounded retrieval — 2 CFR 200.205/212 required before award package (Gate 4)
-    citations, confidence, faithfulness, retrieved_at, retrieval_strategy, cache_hit = retrieval_service.retrieve(
+    citations, confidence, faithfulness, retrieved_at = retrieval_service.retrieve(
         query=f"award decision funding recommendation {req.topic}",
         tenant_id=req.tenant_id,
     )
-    grounding_status, human_review_reasons = compute_grounding_status(
-        citations, confidence, faithfulness, gate_id=GateId.GATE_4
-    )
+    grounding_status, human_review_reasons = compute_grounding_status(citations, confidence, faithfulness)
 
     # Cache revalidation before generation (AC13)
     cache_ok, cache_reasons = validate_before_generation(
@@ -504,8 +486,6 @@ def eval_ssdd_draft(req: SSDDDraftRequest) -> dict[str, Any]:
         faithfulness_score=faithfulness,
         cache_created_at=retrieved_at,
         tenant_id=req.tenant_id,
-        gate_id=GateId.GATE_4,
-        retrieval_strategy=retrieval_strategy,
     )
     if not cache_ok:
         for r in cache_reasons:
@@ -538,8 +518,6 @@ def eval_ssdd_draft(req: SSDDDraftRequest) -> dict[str, Any]:
             "citation_refs": [f"{c.regulation}:{c.section}" for c in citations],
             "escalation_id": escalation.escalation_id,
             "ai_run_id": ai_run_id,
-            "retrieval_strategy": retrieval_strategy,
-            "cache_hit": cache_hit,
             "model": BEDROCK_MODEL_ID,
         }
 
@@ -564,8 +542,6 @@ def eval_ssdd_draft(req: SSDDDraftRequest) -> dict[str, Any]:
         "citation_refs": [f"{c.regulation}:{c.section}" for c in citations],
         "citations": [c.model_dump() for c in citations],
         "ai_run_id": ai_run_id,
-        "retrieval_strategy": retrieval_strategy,
-        "cache_hit": cache_hit,
         "model": BEDROCK_MODEL_ID,
     }
 

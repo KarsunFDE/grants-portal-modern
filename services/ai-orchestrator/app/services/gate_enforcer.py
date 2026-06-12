@@ -60,12 +60,6 @@ class GateEnforcer:
             citation_refs=request.citation_refs,
             confidence_score=request.confidence_score,
             grounding_status=request.grounding_status,
-            # ADR 0009 §10 — audit replay fields copied from request
-            retrieval_filter=request.retrieval_filter,
-            pre_rerank_candidates=request.pre_rerank_candidates,
-            post_rerank_candidates=request.post_rerank_candidates,
-            reranker_model_id=request.reranker_model_id,
-            prompt_template_version=request.prompt_template_version,
         )
 
         audit_trail_service.record_gate_decision(record)

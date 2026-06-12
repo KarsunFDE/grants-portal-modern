@@ -34,7 +34,6 @@ class TestCacheRevalidation:
             faithfulness_score=0.90,
             cache_created_at=datetime.utcnow() - timedelta(hours=1),
             tenant_id="tenant-abc",
-            retrieval_strategy="static",  # known strategy — skips Atlas existence check
         )
         assert valid is True
         assert reasons == []
@@ -114,7 +113,6 @@ class TestCacheRevalidation:
             faithfulness_score=0.90,
             cache_created_at=datetime.utcnow() - timedelta(hours=MAX_CACHE_AGE_HOURS - 1),
             tenant_id="tenant-abc",
-            retrieval_strategy="static",  # known strategy — skips Atlas existence check
         )
         assert HumanReviewReason.CACHE_REVALIDATION_FAILED not in reasons
 

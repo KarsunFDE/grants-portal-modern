@@ -79,6 +79,8 @@ class HumanReviewReason(str, Enum):
     AMENDMENT_SUPERSEDES = "AMENDMENT_SUPERSEDES"
     AGENCY_POLICY_CONFLICT = "AGENCY_POLICY_CONFLICT"
     VERSION_MISMATCH = "VERSION_MISMATCH"
+    # orchestration.md rollout step 13
+    REVISION_LOOP_EXCEEDED = "REVISION_LOOP_EXCEEDED"
 
 
 class InvalidationTrigger(str, Enum):
@@ -132,13 +134,10 @@ class Citation(BaseModel):
     chunk_id: str
     source_id: str
     section: Optional[str] = None
-    subsection: Optional[str] = None        # e.g. "b.1" — ADR 0009 §M3 / retrieval-plan §14
-    section_title: Optional[str] = None     # human-readable heading
     last_revised: Optional[str] = None
     text_excerpt: Optional[str] = None
     tenant_id: Optional[str] = None
-    regulation: Optional[str] = None        # "2 CFR 200", "45 CFR 75", "NOFO", "FAR", "DFARS"
-    relevance_score: Optional[float] = None  # 0–1; populated from vectorSearchScore
+    regulation: Optional[str] = None  # "2 CFR 200", "45 CFR 75", "NOFO", "FAR", "DFARS"
 
 
 class EvidenceRef(BaseModel):
@@ -165,12 +164,7 @@ class GroundedResponse(BaseModel):
     human_review_reasons: List[HumanReviewReason] = Field(default_factory=list)
     hitl_gate: Optional[GateId] = None
     escalation_owner: Optional[str] = None
-    escalation_id: Optional[str] = None
     ai_run_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    # ADR 0009 §10 — audit replay fields
-    retrieval_strategy: Optional[str] = None   # "atlas" | "mongodb_text" | "static" | "cache"
-    corpus_version: Optional[str] = None
-    cache_hit: bool = False
 
 
 class GateDecisionRecord(BaseModel):
@@ -191,12 +185,6 @@ class GateDecisionRecord(BaseModel):
     citation_refs: List[str] = Field(default_factory=list)
     confidence_score: float = Field(ge=0.0, le=1.0, default=0.0)
     grounding_status: GroundingStatus = GroundingStatus.UNGROUNDED
-    # ADR 0009 §10 — audit replay fields; auditor must be able to replay from ai_run_id alone
-    retrieval_filter: Optional[Dict] = None
-    pre_rerank_candidates: List[str] = Field(default_factory=list)
-    post_rerank_candidates: List[str] = Field(default_factory=list)
-    reranker_model_id: Optional[str] = None
-    prompt_template_version: Optional[str] = None
 
     @model_validator(mode="after")
     def _validate_decision_allowed(self) -> "GateDecisionRecord":
@@ -234,12 +222,6 @@ class GateDecisionRequest(BaseModel):
     citation_refs: List[str] = Field(default_factory=list)
     confidence_score: float = Field(ge=0.0, le=1.0, default=0.0)
     grounding_status: GroundingStatus = GroundingStatus.UNGROUNDED
-    # ADR 0009 §10 — audit replay fields; must match GateDecisionRecord for write path to work
-    retrieval_filter: Optional[Dict] = None
-    pre_rerank_candidates: List[str] = Field(default_factory=list)
-    post_rerank_candidates: List[str] = Field(default_factory=list)
-    reranker_model_id: Optional[str] = None
-    prompt_template_version: Optional[str] = None
 
 
 class EscalationRecord(BaseModel):

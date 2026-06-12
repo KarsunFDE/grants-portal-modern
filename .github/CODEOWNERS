@@ -1,9 +1,0 @@
-# CODEOWNERS — controls who is auto-requested for review on GitHub PRs.
-#
-# docs/adrs/scenarios/ contains research/classroom scenario ADRs written in
-# response to specific delivery-lead prompts. They are intentionally out-of-scope
-# for automated code review; no reviewer is assigned so review bots skip them.
-# Human review is still available on demand via manual reviewer assignment.
-
-# Scenario ADRs — no auto-reviewer; excluded from automated review tools.
-docs/adrs/scenarios/

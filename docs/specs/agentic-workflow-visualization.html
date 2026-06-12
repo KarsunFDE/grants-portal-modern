@@ -1,0 +1,514 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Agentic Workflow Visualization</title>
+  <style>
+    :root {
+      --bg: #f5f1ea;
+      --card: #fffaf2;
+      --text: #1f1f1f;
+      --muted: #5f5a52;
+      --human: #c17b3a;
+      --programmatic: #2f6e67;
+      --ai: #174a7e;
+      --line: #d8ccba;
+      --shadow: 0 8px 24px rgba(40, 30, 20, 0.08);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: radial-gradient(circle at 20% 20%, #fff8ea 0%, var(--bg) 45%, #efe4d4 100%);
+      color: var(--text);
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      line-height: 1.4;
+    }
+
+    .wrap { max-width: 1400px; margin: 0 auto; padding: 20px; }
+
+    h1 { margin: 0 0 4px; font-size: 1.7rem; letter-spacing: 0.2px; }
+    h2.section-title { margin: 24px 0 10px; font-size: 1.15rem; color: var(--muted); border-bottom: 1px solid var(--line); padding-bottom: 4px; }
+
+    .subtitle { color: var(--muted); margin-bottom: 18px; font-size: 0.95rem; }
+
+    .grid {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      margin-bottom: 16px;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      box-shadow: var(--shadow);
+      padding: 14px;
+    }
+
+    .card h2 { margin: 0 0 8px; font-size: 1rem; }
+    .human h2   { color: var(--human); }
+    .programmatic h2 { color: var(--programmatic); }
+    .ai h2      { color: var(--ai); }
+
+    ul { margin: 0; padding-left: 18px; }
+    li { margin: 4px 0; color: #2f2a24; font-size: 0.92rem; }
+
+    .diagram-card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      box-shadow: var(--shadow);
+      padding: 16px;
+      overflow-x: auto;
+      margin-bottom: 16px;
+    }
+
+    .diagram-title {
+      font-size: 0.88rem;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 10px;
+    }
+
+    .legend {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin: 10px 0 4px;
+      font-size: 0.88rem;
+    }
+
+    .chip {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 4px 10px;
+      background: #fff;
+    }
+
+    .chip.h { border-color: #d0a173; color: var(--human); }
+    .chip.p { border-color: #69a59e; color: var(--programmatic); }
+    .chip.a { border-color: #5e87b1; color: var(--ai); }
+    .chip.r { border-color: #c0544e; color: #b0453f; }
+
+    .threshold-table {
+      border-collapse: collapse;
+      font-size: 0.88rem;
+      width: 100%;
+      margin-top: 6px;
+    }
+    .threshold-table th, .threshold-table td {
+      text-align: left;
+      padding: 5px 10px;
+      border: 1px solid var(--line);
+    }
+    .threshold-table th { background: #f5ede0; }
+    .threshold-table tr:nth-child(even) td { background: #fdf7ed; }
+
+    .grid-2 {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      margin-bottom: 16px;
+    }
+
+    .footer { margin-top: 14px; color: var(--muted); font-size: 0.85rem; }
+
+    @media (max-width: 900px) {
+      .grid, .grid-2 { grid-template-columns: 1fr; }
+      h1 { font-size: 1.4rem; }
+    }
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Agentic Workflow: Human vs Programmatic vs AI</h1>
+  <p class="subtitle">grants-portal-modern &mdash; AI orchestrator with explicit HITL gates, grounding controls, confidence thresholds, rejection paths, and data handoffs &mdash; 2026-06-09</p>
+
+  <!-- Responsibility Summary -->
+  <section class="grid" aria-label="Responsibility Summary">
+    <article class="card human">
+      <h2>Human Decisions (HITL)</h2>
+      <ul>
+        <li>Gate 1: Screening &mdash; Grants/Program Officer<br><small>APPROVE / REJECT / RETURN_FOR_FIXES</small></li>
+        <li>Gate 2: COI Resolution &mdash; Review Lead<br><small>RESOLVE_AND_CONTINUE / REMOVE_REVIEWER / OVERRIDE</small></li>
+        <li>Gate 3: Factor Acceptance &mdash; Human Reviewer<br><small>ACCEPT / EDIT / REJECT</small></li>
+        <li>Gate 4: Final Award &mdash; Grants Officer<br><small>AWARD / DO_NOT_AWARD / RETURN_TO_REVIEW</small></li>
+        <li>Amendment Review &mdash; Grants Officer<br><small>APPROVE / REJECT / RETURN_FOR_FIXES</small></li>
+      </ul>
+    </article>
+
+    <article class="card programmatic">
+      <h2>Programmatic Control Plane</h2>
+      <ul>
+        <li>Intake persist + ai_run_id generation</li>
+        <li>Prompt injection validation (fence + blocklist)</li>
+        <li>Tenant-bound retrieval + cache revalidation</li>
+        <li>Grounding checks: confidence + faithfulness thresholds</li>
+        <li>Idempotency check before every Bedrock call</li>
+        <li>Escalation routing + revision loop tracking</li>
+        <li>Append-only gate decision audit trail</li>
+        <li>SLA timer + auto-escalation on breach</li>
+      </ul>
+    </article>
+
+    <article class="card ai">
+      <h2>AI Assistance Plane</h2>
+      <ul>
+        <li>Intake triage summary (pre-Gate 1 context)</li>
+        <li>Eligibility / risk narrative (Gate 1)</li>
+        <li>Factor narrative suggestions (Gate 3)</li>
+        <li>Award summary + SSDD draft (Gate 4)</li>
+        <li>Amendment draft generation</li>
+        <li>QA answers (no gate &mdash; informational only)</li>
+        <li>No autonomous final decisions</li>
+      </ul>
+    </article>
+  </section>
+
+  <!-- Confidence Thresholds -->
+  <h2 class="section-title">Grounding Thresholds (applies before every gate)</h2>
+  <div class="diagram-card">
+    <table class="threshold-table">
+      <thead>
+        <tr><th>confidence_score</th><th>faithfulness_score</th><th>Action</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>&ge; 0.80</td><td>&ge; 0.70</td><td>Auto-proceed to gate owner</td></tr>
+        <tr><td>0.65 – 0.79</td><td>&ge; 0.70</td><td>Flag LOW_CONFIDENCE + EscalationRecord &mdash; still advance to gate owner</td></tr>
+        <tr><td>&lt; 0.65</td><td>any</td><td>BLOCK &mdash; gate owner must release before AI repeats</td></tr>
+        <tr><td>any</td><td>&lt; 0.70</td><td>BLOCK (citation mismatch &mdash; treated same as confidence &lt; 0.65)</td></tr>
+      </tbody>
+    </table>
+    <p style="font-size:0.85rem;color:var(--muted);margin:8px 0 0">Revision loop cap: 3 per gate. Exceeding cap triggers supervisor override_flag requirement.</p>
+  </div>
+
+  <!-- Main Workflow Diagram -->
+  <h2 class="section-title">Main Grant Application Workflow</h2>
+  <div class="diagram-card">
+    <div class="diagram-title">Intake &rarr; Screening &rarr; Peer Review &rarr; Award &mdash; with rejection and revision paths</div>
+    <div class="mermaid">
+flowchart TD
+  classDef human fill:#f7e2cc,stroke:#c17b3a,stroke-width:1.5px,color:#3d2817
+  classDef prog  fill:#dcefeb,stroke:#2f6e67,stroke-width:1.5px,color:#133733
+  classDef ai    fill:#dbe8f7,stroke:#174a7e,stroke-width:1.5px,color:#0f2c49
+  classDef gate  fill:#fbe0de,stroke:#b0453f,stroke-width:1.5px,color:#5a1f1a
+  classDef term  fill:#f0ece4,stroke:#999,stroke-width:1px,color:#555
+
+  U["User Input
+  tenant_id · grant_application_id
+  raw_text · applicant fields"]:::human
+
+  P1["Intake
+  persist · ai_run_id · audit start"]:::prog
+
+  VINJ["validate_before_generation
+  injection fence · blocklist · schema"]:::prog
+
+  P2["Retrieval Pipeline
+  vector search · text fallback · cache
+  corpus_version pinned"]:::prog
+
+  IDEM["idempotency_store.check
+  skip Bedrock if already complete"]:::prog
+
+  AT["AI: Intake Triage
+  risk_tier · completeness · flagged_issues"]:::ai
+
+  A1["AI: Eligibility/Risk Draft
+  Claude Sonnet · grounded on corpus"]:::ai
+
+  P3["Grounding Validator
+  confidence · faithfulness · citations"]:::prog
+
+  C1{"Threshold
+  check?"}:::gate
+
+  ESC1["EscalationRecord
+  GROUNDING_FAIL or LOW_CONFIDENCE"]:::prog
+
+  G1["Gate 1: Screening Decision
+  Grants / Program Officer
+  SLA: 5 business days"]:::human
+
+  G1R["REJECT: Denial Record
+  rationale · terminate workflow"]:::term
+
+  G1V["RETURN_FOR_FIXES: revision_notes
+  loop back to retrieval
+  loop count &le; 3"]:::prog
+
+  P5a["Gate 1 Decision Record
+  append-only"]:::prog
+
+  P6["Reviewer Assignment
+  COI check · panel setup"]:::prog
+
+  G2["Gate 2: COI Resolution
+  Review Lead
+  SLA: 2 business days"]:::human
+
+  G2F["COI CONFLICT
+  reassign / disqualify
+  escalate if panel exhausted"]:::term
+
+  P5b["Gate 2 Decision Record"]:::prog
+
+  A2["AI: Factor Suggestions
+  Claude Sonnet · scoring narrative"]:::ai
+
+  P8["Grounding Validator"]:::prog
+
+  C2{"Threshold
+  check?"}:::gate
+
+  ESC2["EscalationRecord"]:::prog
+
+  G3["Gate 3: Factor Acceptance
+  Human Reviewer
+  SLA: 3 business days"]:::human
+
+  G3E["EDIT: human_feedback
+  appended to prompt
+  loop &le; 3"]:::prog
+
+  G3R["REJECT: EscalationRecord
+  escalate to Review Lead"]:::term
+
+  P5c["Gate 3 Decision Record"]:::prog
+
+  A3["AI: Award Summary + SSDD Draft
+  Claude Sonnet"]:::ai
+
+  P10["Grounding Validator"]:::prog
+
+  C3{"Threshold
+  check?"}:::gate
+
+  ESC3["EscalationRecord"]:::prog
+
+  G4["Gate 4: Final Award Decision
+  Grants Officer
+  SLA: 10 business days"]:::human
+
+  G4R["DO_NOT_AWARD: Denial Record
+  rationale · evidence_refs
+  terminate — no revision at Gate 4"]:::term
+
+  P5d["Gate 4 Decision Record
+  audit trail sealed"]:::prog
+
+  DONE["Workflow Complete"]:::prog
+
+  U       --> P1
+  P1      --> VINJ
+  VINJ    --> P2
+  P2      --> IDEM
+  IDEM    --> AT
+  AT      --> A1
+  A1      --> P3
+  P3      --> C1
+
+  C1      -->|"&ge;0.80 proceed"| G1
+  C1      -->|"0.65–0.79 flag"| ESC1
+  C1      -->|"&lt;0.65 block"| ESC1
+  ESC1    --> G1
+
+  G1      -->|APPROVE| P5a
+  G1      -->|REJECT| G1R
+  G1      -->|"RETURN_FOR_FIXES"| G1V
+  G1V     --> P2
+
+  P5a     --> P6
+  P6      --> G2
+
+  G2      -->|"RESOLVE_AND_CONTINUE"| P5b
+  G2      -->|"REMOVE_REVIEWER"| G2F
+
+  P5b     --> A2
+  A2      --> P8
+  P8      --> C2
+
+  C2      -->|"grounded"| G3
+  C2      -->|"blocked"| ESC2
+  ESC2    --> G3
+
+  G3      -->|ACCEPT| P5c
+  G3      -->|EDIT| G3E
+  G3      -->|REJECT| G3R
+  G3E     --> A2
+
+  P5c     --> A3
+  A3      --> P10
+  P10     --> C3
+
+  C3      -->|"grounded"| G4
+  C3      -->|"blocked"| ESC3
+  ESC3    --> G4
+
+  G4      -->|AWARD| P5d
+  G4      -->|"DO_NOT_AWARD"| G4R
+
+  P5d     --> DONE
+    </div>
+  </div>
+
+  <!-- Side Workflows -->
+  <h2 class="section-title">Side Workflows: Amendment and QA</h2>
+  <div class="grid-2">
+
+    <div class="diagram-card">
+      <div class="diagram-title">Amendment Workflow</div>
+      <div class="mermaid">
+flowchart TD
+  classDef human fill:#f7e2cc,stroke:#c17b3a,stroke-width:1.5px,color:#3d2817
+  classDef prog  fill:#dcefeb,stroke:#2f6e67,stroke-width:1.5px,color:#133733
+  classDef ai    fill:#dbe8f7,stroke:#174a7e,stroke-width:1.5px,color:#0f2c49
+  classDef gate  fill:#fbe0de,stroke:#b0453f,stroke-width:1.5px,color:#5a1f1a
+  classDef term  fill:#f0ece4,stroke:#999,stroke-width:1px,color:#555
+
+  UA["User: AmendmentRequest
+  original_grant_application_id
+  amendment_reason · changed_sections"]:::human
+
+  PA1["Intake: persist amendment
+  link to original GateDecisionRecord chain
+  new ai_run_id"]:::prog
+
+  PA2["Retrieval + corpus_version pin"]:::prog
+
+  AA1["AI: Draft Amended Sections
+  Claude Sonnet"]:::ai
+
+  PA3["Grounding Validator"]:::prog
+
+  GA["Amendment Review Gate
+  Grants Officer
+  SLA: 5 business days"]:::human
+
+  GAR["REJECT: denial record
+  original approval unchanged"]:::term
+
+  GAV["RETURN_FOR_FIXES: loop &le; 3
+  human_feedback appended"]:::prog
+
+  PDA["AmendmentDecisionRecord
+  append-only"]:::prog
+
+  DONEA["Amendment Complete"]:::prog
+
+  UA  --> PA1 --> PA2 --> AA1 --> PA3 --> GA
+  GA  -->|APPROVE| PDA --> DONEA
+  GA  -->|REJECT| GAR
+  GA  -->|"RETURN_FOR_FIXES"| GAV --> AA1
+      </div>
+    </div>
+
+    <div class="diagram-card">
+      <div class="diagram-title">QA Workflow (no gate &mdash; informational only)</div>
+      <div class="mermaid">
+flowchart TD
+  classDef human fill:#f7e2cc,stroke:#c17b3a,stroke-width:1.5px,color:#3d2817
+  classDef prog  fill:#dcefeb,stroke:#2f6e67,stroke-width:1.5px,color:#133733
+  classDef ai    fill:#dbe8f7,stroke:#174a7e,stroke-width:1.5px,color:#0f2c49
+  classDef gate  fill:#fbe0de,stroke:#b0453f,stroke-width:1.5px,color:#5a1f1a
+  classDef term  fill:#f0ece4,stroke:#999,stroke-width:1px,color:#555
+
+  UQ["User: QARequest
+  question · corpus_scope
+  grant_application_id (optional)"]:::human
+
+  PQ1["Validate + sanitize
+  injection fence + blocklist"]:::prog
+
+  PQ2["Retrieval: top-K chunks
+  2CFR200 / 45CFR75 corpus
+  optional: application context (tenant check)"]:::prog
+
+  AQ["AI: Generate Answer
+  Claude Sonnet
+  same prompt structure"]:::ai
+
+  PQ3["Grounding Validator"]:::prog
+
+  CQ{"Grounded?"}:::gate
+
+  PQ4["Persist QAResponse
+  ai_run_id · audit (no gate record)"]:::prog
+
+  RES["Return answer + citation_refs
+  + disclaimer: informational only"]:::prog
+
+  INSUF["Return INSUFFICIENT_GROUNDING
+  no fabricated answer"]:::term
+
+  LIVEFLAG["requires_human_review=true
+  route to active gate owner if
+  question relates to live application"]:::human
+
+  UQ   --> PQ1 --> PQ2 --> AQ --> PQ3 --> CQ
+  CQ   -->|"grounded"| PQ4 --> RES
+  CQ   -->|"ungrounded"| INSUF
+  PQ4  -->|"live application"| LIVEFLAG
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Data Flow -->
+  <h2 class="section-title">Stage-to-Stage Data Handoffs (Pydantic Models)</h2>
+  <div class="diagram-card">
+    <div class="mermaid">
+flowchart LR
+  classDef model fill:#f9f5ec,stroke:#b8a98a,stroke-width:1px,color:#3a3020
+
+  S1["User Input\ntenant_id · grant_application_id\nraw_text · applicant fields"]:::model
+  S2["Intake Output\n+ ai_run_id\n+ audit_start_ts"]:::model
+  S3["Retrieval Output\nretrieved_sources\ncitation_candidates\ncorpus_version"]:::model
+  S4["GroundedResponse\nanswer · citation_refs\nconfidence_score · faithfulness_score\ngrounding_status\nrequires_human_review\nhuman_review_reasons"]:::model
+  S5["GateDecisionRequest\nactor_id · actor_role\ndecision · rationale\noverride_flag · evidence_refs"]:::model
+  S6["GateDecisionRecord\n(append-only)"]:::model
+  S7["EscalationRecord\nerror_type · human_review_reason\ngate_id · ai_run_id"]:::model
+
+  S1 -->|"sanitized + persisted"| S2
+  S2 -->|"retrieval query"| S3
+  S3 -->|"context + citations"| S4
+  S4 -->|"to gate owner"| S5
+  S5 -->|"decision persisted"| S6
+  S4 -->|"blocked or flagged"| S7
+    </div>
+  </div>
+
+  <!-- Legend -->
+  <div class="legend" aria-label="Legend">
+    <span class="chip h">Human: policy / risk authority</span>
+    <span class="chip p">Programmatic: control, validation, audit</span>
+    <span class="chip a">AI: assistive drafting / reasoning (Claude Sonnet)</span>
+    <span class="chip r">Gate / Risk decision point</span>
+  </div>
+
+  <p class="footer">
+    Models: Claude Sonnet (<code>anthropic.claude-3-7-sonnet-20250219-v1:0</code>) for all generation tasks &mdash;
+    Titan Embed v2 (<code>amazon.titan-embed-text-v2:0</code>) for retrieval embeddings &mdash;
+    configured via <code>BEDROCK_MODEL_ID</code> env var &mdash;
+    legacy_chain.py migrates to direct invoke_model() at W2.
+  </p>
+</div>
+
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: "base",
+    securityLevel: "loose",
+    flowchart: { curve: "basis", htmlLabels: true, useMaxWidth: true }
+  });
+</script>
+</body>
+</html>
