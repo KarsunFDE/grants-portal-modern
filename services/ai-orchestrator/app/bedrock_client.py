@@ -47,6 +47,13 @@ except ImportError:  # pragma: no cover
     _BOTO_AVAILABLE = False
 
 try:
+    import urllib.request as _urllib_req
+    import urllib.error as _urllib_err
+    _URLLIB_AVAILABLE = True
+except ImportError:  # pragma: no cover
+    _URLLIB_AVAILABLE = False
+
+try:
     from langsmith import traceable as _ls_traceable
     _LANGSMITH_AVAILABLE = True
 except ImportError:  # pragma: no cover
@@ -62,13 +69,15 @@ BEDROCK_MODEL_ID = os.environ.get(
     "anthropic.claude-3-7-sonnet-20250219-v1:0",
 )
 AWS_REGION = os.environ.get("AWS_REGION", "us-east-1")
-
+_BEARER_TOKEN = os.environ.get("AWS_BEARER_TOKEN_BEDROCK", "")
 
 _client = None
 
 
 def _get_client():
     global _client
+    if _BEARER_TOKEN:
+        return None  # bearer-token path handles calls directly; skip boto3
     if _client is None and _BOTO_AVAILABLE:
         try:
             _client = boto3.client("bedrock-runtime", region_name=AWS_REGION)
@@ -76,6 +85,57 @@ def _get_client():
             log.warning("bedrock-runtime client init failed: %s", exc)
             _client = None
     return _client
+
+
+def _invoke_via_bearer(prompt: str, system: str | None,
+                       max_tokens: int, temperature: float) -> dict[str, Any]:
+    """Call Bedrock Runtime with Authorization: Bearer (Bedrock API Key auth)."""
+    # Only encode the colon in version suffix (e.g. v1:0 → v1%3A0).
+    # Dots and hyphens are valid URL path characters — do not encode them.
+    encoded_model = BEDROCK_MODEL_ID.replace(":", "%3A")
+    url = (
+        f"https://bedrock-runtime.{AWS_REGION}.amazonaws.com"
+        f"/model/{encoded_model}/invoke"
+    )
+
+    messages = [{"role": "user", "content": prompt}]
+    body: dict[str, Any] = {
+        "anthropic_version": "bedrock-2023-05-31",
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+        "messages": messages,
+    }
+    if system:
+        body["system"] = system
+
+    data = json.dumps(body).encode("utf-8")
+    req = _urllib_req.Request(
+        url,
+        data=data,
+        headers={
+            "Authorization": f"Bearer {_BEARER_TOKEN}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with _urllib_req.urlopen(req, timeout=60) as resp:
+            payload = json.loads(resp.read())
+        text = ""
+        for block in payload.get("content", []):
+            if block.get("type") == "text":
+                text += block.get("text", "")
+        return {"body": text or json.dumps(payload), "model": BEDROCK_MODEL_ID,
+                "region": AWS_REGION, "stub": False}
+    except _urllib_err.HTTPError as exc:
+        body_bytes = exc.read()
+        log.warning("bedrock bearer-token InvokeModel HTTP %s: %s; returning stub",
+                    exc.code, body_bytes[:200])
+        return _stub(prompt)
+    except Exception as exc:
+        log.warning("bedrock bearer-token InvokeModel failed (%s); returning stub", exc)
+        return _stub(prompt)
 
 
 @_ls_traceable(name="invoke_model", run_type="llm")
@@ -94,6 +154,9 @@ def invoke_model(prompt: str, *, system: str | None = None,
     ⚠ Item 4 — return shape NOT Pydantic-validated.
     ⚠ Item 6 — no correlation-id forwarded.
     """
+    if _BEARER_TOKEN:
+        return _invoke_via_bearer(prompt, system, max_tokens, temperature)
+
     client = _get_client()
     if client is None:
         log.info("bedrock stub-fallback (no boto3 / no credentials)")

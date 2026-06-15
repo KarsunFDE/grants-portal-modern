@@ -112,7 +112,7 @@ services:
         required: false
     environment:
       AWS_REGION: us-east-1
-      BEDROCK_MODEL_ID: anthropic.claude-3-7-sonnet-20250219-v1:0
+      BEDROCK_MODEL_ID: us.anthropic.claude-haiku-4-5-20251001-v1:0
       MONGO_URL: mongodb://app:app_dev_password@mongodb:27017
       ATLAS_URI: mongodb://mongodb-atlas-local:27017
       ATLAS_DB_NAME: grantsportal_retrieval
