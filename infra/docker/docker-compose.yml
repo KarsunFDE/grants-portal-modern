@@ -116,7 +116,7 @@ services:
       MONGO_URL: mongodb://app:app_dev_password@mongodb:27017
       ATLAS_URI: mongodb://mongodb-atlas-local:27017
       ATLAS_DB_NAME: grantsportal_retrieval
-      ATLAS_RETRIEVAL_ENABLED: "false"   # Phase B: flip to "true" after ingest_corpus.py runs
+      ATLAS_RETRIEVAL_ENABLED: "true"
     depends_on:
       - mongodb
       - mongodb-atlas-local

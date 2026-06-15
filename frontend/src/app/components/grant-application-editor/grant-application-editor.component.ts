@@ -55,7 +55,9 @@ interface GateBtn { value: string; label: string; primary?: boolean; danger?: bo
             <em>Filtered by agency_id — Item 10 surface.</em>
           </p>
           <input [(ngModel)]="clauseQuery" (keyup.enter)="searchClauses()" placeholder="e.g., 200.430 allowable costs"/>
-          <button (click)="searchClauses()" style="margin-top:0.5rem">Search</button>
+          <button (click)="searchClauses()" style="margin-top:0.5rem" [disabled]="clauseSearchLoading">
+            {{ clauseSearchLoading ? 'Searching…' : 'Search' }}
+          </button>
           <ul *ngIf="clauseResults.length > 0">
             <li *ngFor="let c of clauseResults">
               <strong>{{ c.id }}</strong> — {{ c.title }}
@@ -203,13 +205,23 @@ export class GrantApplicationEditorComponent implements OnInit {
       ?? 'Significance (40%)\nApproach (30%)\nFeasibility / Investigator (20%)\nBudget reasonableness (10%)';
   }
 
+  clauseSearchLoading = false;
+
   searchClauses(): void {
-    const q = this.clauseQuery.toLowerCase();
-    this.clauseResults = [
-      { id: '2 CFR 200.204', title: 'Notices of funding opportunity' },
-      { id: '2 CFR 200.205', title: 'Federal awarding agency review of merit of proposals' },
-      { id: '2 CFR 200.430', title: 'Compensation — personal services (allowable costs)' },
-    ].filter((c) => !q || c.id.toLowerCase().includes(q) || c.title.toLowerCase().includes(q));
+    if (!this.clauseQuery.trim()) return;
+    this.clauseSearchLoading = true;
+    this.clauseResults = [];
+    this.http.post<any>(`${ORCH_URL}/rag/clause-search`, {
+      query: this.clauseQuery,
+      tenant_id: 'demo',
+      top_k: 5,
+    }).subscribe({
+      next: (r) => {
+        this.clauseResults = (r.hits || []).map((h: any) => ({ id: h.clause_id, title: h.title }));
+        this.clauseSearchLoading = false;
+      },
+      error: () => { this.clauseSearchLoading = false; },
+    });
   }
 
   gateDecisions(): GateBtn[] {

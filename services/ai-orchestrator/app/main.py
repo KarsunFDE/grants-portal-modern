@@ -44,6 +44,7 @@ from datetime import datetime
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 # ⚠ Item 5 — v1.0 composed-Runnable style. Imported but not actually wired to
@@ -77,6 +78,12 @@ logging.basicConfig(
 log = logging.getLogger("ai-orchestrator")
 
 app = FastAPI(title="ai-orchestrator", version="0.1.0-brownfield")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:4200"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 app.include_router(gates_router.router)
 app.include_router(retrieval_v2_router.router)
 app.include_router(workflow_router.router)
@@ -253,7 +260,7 @@ def check_eligibility(req: EligibilityCheckRequest) -> dict[str, Any]:
         f"eligibility risk review applicant_type={req.applicant_type or ''} "
         f"assistance_listing={req.assistance_listing_number or ''}"
     )
-    citations, confidence, faithfulness, retrieved_at = retrieval_service.retrieve(
+    citations, confidence, faithfulness, retrieved_at, _strategy, _cache_hit = retrieval_service.retrieve(
         query=query,
         tenant_id=req.tenant_id,
     )
@@ -367,7 +374,7 @@ def draft_amendment(req: AmendmentRequest) -> dict[str, Any]:
 
     # Retrieval + grounding required before amendment generation (spec §6.1)
     query = f"amendment NOFO 2 CFR 200.204 {req.topic}"
-    citations, confidence, faithfulness, retrieved_at = retrieval_service.retrieve(
+    citations, confidence, faithfulness, retrieved_at, _strategy, _cache_hit = retrieval_service.retrieve(
         query=query,
         tenant_id=req.tenant_id,
     )
@@ -453,7 +460,7 @@ def answer_qa(req: QaDraftRequest) -> dict[str, Any]:
         raise HTTPException(422, "tenant_id required for Tier 2 decision-adjacent QA (grant_application_id present)")
     tenant_id = req.tenant_id or "default"
     query = f"applicant question regulatory FAQ {req.question[:200]}"
-    citations, confidence, faithfulness, retrieved_at = retrieval_service.retrieve(
+    citations, confidence, faithfulness, retrieved_at, _strategy, _cache_hit = retrieval_service.retrieve(
         query=query,
         tenant_id=tenant_id,
     )
@@ -566,7 +573,7 @@ def eval_factor_suggest(req: FactorSuggestRequest) -> dict[str, Any]:
     log.info("eval/factor-suggest topic=%r", req.topic)
 
     # Grounded retrieval — 2 CFR 200.204/205 required before factor suggestion (Gate 3)
-    citations, confidence, faithfulness, retrieved_at = retrieval_service.retrieve(
+    citations, confidence, faithfulness, retrieved_at, _strategy, _cache_hit = retrieval_service.retrieve(
         query=f"evaluation factor merit criterion {req.topic}",
         tenant_id=req.tenant_id,
     )
@@ -664,7 +671,7 @@ def eval_ssdd_draft(req: SSDDDraftRequest) -> dict[str, Any]:
     log.info("ssdd-draft called topic=%r tenant=%r peer_review_id=%r", resolved_topic, resolved_tenant, req.peerReviewId)
 
     # Grounded retrieval — 2 CFR 200.205/212 required before award package (Gate 4)
-    citations, confidence, faithfulness, retrieved_at = retrieval_service.retrieve(
+    citations, confidence, faithfulness, retrieved_at, _strategy, _cache_hit = retrieval_service.retrieve(
         query=f"award decision funding recommendation {resolved_topic}",
         tenant_id=resolved_tenant,
     )

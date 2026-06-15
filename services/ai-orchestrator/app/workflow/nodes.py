@@ -82,7 +82,7 @@ def _grounded_retrieve(
     Embedding failures are caught here and treated as MISSING_CITATIONS (hard-block).
     """
     try:
-        citations, conf, faith, retrieved_at = retrieval_service.retrieve(
+        citations, conf, faith, retrieved_at, _strategy, _cache_hit = retrieval_service.retrieve(
             query=query,
             tenant_id=state["tenant_id"],
             corpus_version=state.get("corpus_version", "v1"),
