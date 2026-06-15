@@ -15,6 +15,10 @@ from app.services.grounding import CONFIDENCE_THRESHOLD, FAITHFULNESS_THRESHOLD
 
 MAX_CACHE_AGE_HOURS = 24
 
+# Sentinel for shared regulatory corpus (2 CFR 200, 45 CFR 75).
+# Must match atlas_search.GLOBAL_TENANT_SENTINEL.
+_GLOBAL_TENANT_SENTINEL = "global"
+
 
 def validate_before_generation(
     citations: List[Citation],
@@ -49,7 +53,7 @@ def validate_before_generation(
         reasons.append(HumanReviewReason.CACHE_REVALIDATION_FAILED)
 
     for c in citations:
-        if c.tenant_id and c.tenant_id != tenant_id:
+        if c.tenant_id and c.tenant_id != tenant_id and c.tenant_id != _GLOBAL_TENANT_SENTINEL:
             reasons.append(HumanReviewReason.TENANT_MISMATCH)
             break
 

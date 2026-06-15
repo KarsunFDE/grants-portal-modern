@@ -28,7 +28,9 @@ def get_graph():
 
 def _build_checkpointer():
     import os
-    require_mongo = os.getenv("REQUIRE_MONGO_CHECKPOINT", "").lower() in ("1", "true", "yes")
+    # Default: require durable Mongo checkpointer so paused HITL gates survive restarts.
+    # Set ALLOW_MEMORY_CHECKPOINTER=true only for dev/CI environments with no Mongo.
+    allow_memory = os.getenv("ALLOW_MEMORY_CHECKPOINTER", "").lower() in ("1", "true", "yes")
     try:
         from langgraph.checkpoint.mongodb import MongoDBSaver
         from app.db import get_mongo_client
@@ -37,13 +39,16 @@ def _build_checkpointer():
         log.info("Using MongoDBSaver checkpointer (durable)")
         return checkpointer
     except Exception as exc:
-        if require_mongo:
+        if not allow_memory:
             raise RuntimeError(
-                f"REQUIRE_MONGO_CHECKPOINT=true but MongoDBSaver unavailable: {exc}"
+                f"MongoDBSaver unavailable and ALLOW_MEMORY_CHECKPOINTER is not set: {exc}. "
+                "Ensure MongoDB is reachable, or set ALLOW_MEMORY_CHECKPOINTER=true for "
+                "dev/CI only (paused HITL gates will not survive restarts)."
             ) from exc
         log.warning(
             "MongoDBSaver unavailable (%s); falling back to MemorySaver "
-            "(non-durable — set REQUIRE_MONGO_CHECKPOINT=true to hard-fail instead)",
+            "(non-durable — ALLOW_MEMORY_CHECKPOINTER=true). "
+            "Do NOT use in production: paused HITL gates lost on restart.",
             exc,
         )
         from langgraph.checkpoint.memory import MemorySaver

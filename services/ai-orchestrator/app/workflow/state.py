@@ -58,6 +58,7 @@ class WorkflowState(TypedDict, total=False):
     factor_suggestion: Optional[str]
     ssdd_narrative: Optional[str]
     denial_reason: Optional[str]
+    terminal_gate_id: Optional[str]    # GateId value of the gate that terminated the workflow
 
 
 class RevisionLoopCapExceeded(Exception):
@@ -118,6 +119,7 @@ def make_initial_state(
         factor_suggestion=None,
         ssdd_narrative=None,
         denial_reason=None,
+        terminal_gate_id=None,
     )
 
 

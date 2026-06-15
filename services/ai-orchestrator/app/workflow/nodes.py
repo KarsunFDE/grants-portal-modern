@@ -37,6 +37,13 @@ from app.workflow.agents import (
     run_reviewer_assignment,
 )
 from app.workflow.idempotency import idempotency_store
+try:
+    from langsmith import traceable as _traceable
+except ImportError:  # pragma: no cover
+    def _traceable(**_kw):
+        def _d(fn): return fn
+        return _d
+
 from app.workflow.state import (
     WorkflowState,
     RevisionLoopCapExceeded,
@@ -62,6 +69,7 @@ def _safe_input(text: Optional[str], max_len: int = _MAX_RAW_TEXT_LEN) -> str:
 # Helpers
 # ---------------------------------------------------------------------------
 
+@_traceable(name="_grounded_retrieve", run_type="retriever", tags=["retrieval", "grounding"])
 def _grounded_retrieve(
     query: str,
     state: WorkflowState,
@@ -71,12 +79,21 @@ def _grounded_retrieve(
     """
     Retrieval + grounding for a stage.
     Returns (citations, conf, faith, grounding_status, reasons, should_block).
+    Embedding failures are caught here and treated as MISSING_CITATIONS (hard-block).
     """
-    citations, conf, faith, retrieved_at = retrieval_service.retrieve(
-        query=query,
-        tenant_id=state["tenant_id"],
-        corpus_version=state.get("corpus_version", "v1"),
-    )
+    try:
+        citations, conf, faith, retrieved_at = retrieval_service.retrieve(
+            query=query,
+            tenant_id=state["tenant_id"],
+            corpus_version=state.get("corpus_version", "v1"),
+        )
+    except Exception as exc:
+        log.error(
+            "_grounded_retrieve: retrieval failed gate=%s query=%r: %s — treating as UNGROUNDED",
+            gate_id.value, query[:80], exc,
+        )
+        from datetime import datetime as _dt
+        citations, conf, faith, retrieved_at = [], 0.0, 0.0, _dt.utcnow()
     grounding_status, reasons = compute_grounding_status(
         citations, conf, faith, gate_id=gate_id
     )
@@ -119,6 +136,7 @@ def _create_escalation(
     return escalation.escalation_id
 
 
+@_traceable(name="_bedrock_with_idempotency", run_type="llm", tags=["bedrock", "idempotency"])
 def _bedrock_with_idempotency(
     prompt: str,
     system: str,
@@ -228,13 +246,32 @@ def eligibility_node(state: WorkflowState) -> dict:
 
     if should_block:
         esc_id = _create_escalation(state, GateId.GATE_1, reasons, grounding_status, conf, ai_run_id=ai_run_id)
-        log.warning("eligibility_node BLOCKED grounding=%s", grounding_status.value)
+        log.warning("eligibility_node BLOCKED grounding=%s esc=%s — interrupting for human decision", grounding_status.value, esc_id)
+        gate_decision: str = interrupt({
+            "workflow_run_id": state["workflow_run_id"],
+            "hitl_gate": "GATE_1",
+            "ai_run_id": ai_run_id,
+            "grounding_status": grounding_status.value,
+            "confidence_score": conf,
+            "human_review_reasons": [r.value for r in reasons],
+            "escalation_id": esc_id,
+            "requires_human_review": True,
+            "blocked": True,
+        })
+        is_terminal = gate_decision == "REJECT"
         return {
-            "active_gate_id": GateId.GATE_1.value,
-            "gate_states": {**state.get("gate_states", {}), "GATE_1": "BLOCKED"},
+            "active_gate_id": None,
+            "gate_states": {**state.get("gate_states", {}), "GATE_1": gate_decision},
             "pending_escalation_ids": [*state.get("pending_escalation_ids", []), esc_id],
             "ai_run_ids": ai_run_ids,
+            "completed": is_terminal,
+            "denial_reason": "Gate 1 REJECT after grounding escalation" if is_terminal else None,
+            "terminal_gate_id": GateId.GATE_1.value if is_terminal else None,
         }
+
+    if grounding_status == GroundingStatus.LOW_CONFIDENCE:
+        _create_escalation(state, GateId.GATE_1, reasons, grounding_status, conf, ai_run_id=ai_run_id)
+        log.info("eligibility_node LOW_CONFIDENCE escalation created grounding=%s", grounding_status.value)
 
     bedrock = _bedrock_with_idempotency(
         prompt=(
@@ -274,6 +311,20 @@ def eligibility_node(state: WorkflowState) -> dict:
     # Post-interrupt: process gate decision
     gate_states = {**state.get("gate_states", {}), "GATE_1": gate_decision}
     updated_counts = dict(state.get("revision_loop_counts", {}))
+
+    if gate_decision == "REJECT":
+        return {
+            "gate_states": gate_states,
+            "revision_loop_counts": updated_counts,
+            "ai_run_ids": ai_run_ids,
+            "eligibility_output": bedrock.get("body", ""),
+            "current_stage": "SCREENING",
+            "active_gate_id": None,
+            "completed": True,
+            "denial_reason": "Gate 1 REJECT by grants/program officer",
+            "terminal_gate_id": GateId.GATE_1.value,
+        }
+
     if gate_decision == "RETURN_FOR_FIXES":
         try:
             updated_counts = increment_revision_loop(state, "GATE_1")
@@ -295,9 +346,9 @@ def eligibility_node(state: WorkflowState) -> dict:
                 "active_gate_id": None,
                 "completed": True,
                 "denial_reason": "Gate 1 revision loop cap exceeded after 3 attempts",
+                "terminal_gate_id": GateId.GATE_1.value,
             }
 
-    ineligible = (state.get("applicant_type") or "").upper() in {"INDIVIDUAL", "FOR_PROFIT"}
     return {
         "gate_states": gate_states,
         "revision_loop_counts": updated_counts,
@@ -387,8 +438,8 @@ def coi_check_node(state: WorkflowState) -> dict:
 
     return {
         "coi_flags": coi_flags,
-        # Pre-set GATE_2 when flags present so checkpoint is correct before gate_2_node interrupts
-        "active_gate_id": GateId.GATE_2.value if coi_flags else None,
+        # Always pre-set GATE_2 — gate_2_node always interrupts (even when no COI flags)
+        "active_gate_id": GateId.GATE_2.value,
     }
 
 
@@ -398,19 +449,21 @@ def coi_check_node(state: WorkflowState) -> dict:
 
 def gate_2_node(state: WorkflowState) -> dict:
     """
-    Interrupts for Review Lead when COI flags are present.
-    If no flags, passes through without interrupting.
+    Always interrupts for Review Lead — even when no COI flags are present.
+    Per spec: "No scoring starts until COI is resolved by a human."
+    Review Lead explicitly confirms clean state or acts on flagged reviewers.
     """
     coi_flags = state.get("coi_flags") or {}
-    if not coi_flags:
-        return {"gate_states": {**state.get("gate_states", {}), "GATE_2": "RESOLVE_AND_CONTINUE"}}
-
-    log.info("gate_2_node INTERRUPT workflow=%s flagged_reviewers=%d", state["workflow_run_id"], len(coi_flags))
+    log.info(
+        "gate_2_node INTERRUPT workflow=%s flagged_reviewers=%d coi_detected=%s",
+        state["workflow_run_id"], len(coi_flags), bool(coi_flags),
+    )
     gate_decision: str = interrupt({
         "workflow_run_id": state["workflow_run_id"],
         "hitl_gate": "GATE_2",
         "ai_run_id": (state.get("ai_run_ids") or {}).get("SCREENING") or str(uuid.uuid4()),
         "coi_flags": coi_flags,
+        "coi_detected": bool(coi_flags),
         "reviewer_candidates": state.get("reviewer_candidates"),
         "grant_application_id": state["grant_application_id"],
     })
@@ -493,12 +546,32 @@ def factor_suggest_node(state: WorkflowState) -> dict:
 
     if should_block:
         esc_id = _create_escalation(state, GateId.GATE_3, reasons, grounding_status, conf, ai_run_id=ai_run_id)
+        log.warning("factor_suggest_node BLOCKED grounding=%s esc=%s — interrupting for human decision", grounding_status.value, esc_id)
+        gate_decision: str = interrupt({
+            "workflow_run_id": state["workflow_run_id"],
+            "hitl_gate": "GATE_3",
+            "ai_run_id": ai_run_id,
+            "grounding_status": grounding_status.value,
+            "confidence_score": conf,
+            "human_review_reasons": [r.value for r in reasons],
+            "escalation_id": esc_id,
+            "requires_human_review": True,
+            "blocked": True,
+        })
+        is_terminal = gate_decision == "REJECT"
         return {
-            "active_gate_id": GateId.GATE_3.value,
-            "gate_states": {**state.get("gate_states", {}), "GATE_3": "BLOCKED"},
+            "active_gate_id": None,
+            "gate_states": {**state.get("gate_states", {}), "GATE_3": gate_decision},
             "pending_escalation_ids": [*state.get("pending_escalation_ids", []), esc_id],
             "ai_run_ids": ai_run_ids,
+            "completed": is_terminal,
+            "denial_reason": "Gate 3 REJECT after grounding escalation" if is_terminal else None,
+            "terminal_gate_id": GateId.GATE_3.value if is_terminal else None,
         }
+
+    if grounding_status == GroundingStatus.LOW_CONFIDENCE:
+        _create_escalation(state, GateId.GATE_3, reasons, grounding_status, conf, ai_run_id=ai_run_id)
+        log.info("factor_suggest_node LOW_CONFIDENCE escalation created grounding=%s", grounding_status.value)
 
     bedrock = _bedrock_with_idempotency(
         prompt=(
@@ -528,6 +601,20 @@ def factor_suggest_node(state: WorkflowState) -> dict:
 
     gate_states = {**state.get("gate_states", {}), "GATE_3": gate_decision}
     updated_counts = dict(state.get("revision_loop_counts", {}))
+
+    if gate_decision == "REJECT":
+        return {
+            "gate_states": gate_states,
+            "revision_loop_counts": updated_counts,
+            "ai_run_ids": ai_run_ids,
+            "factor_suggestion": bedrock.get("body", ""),
+            "current_stage": "PEER_REVIEW",
+            "active_gate_id": None,
+            "completed": True,
+            "denial_reason": "Gate 3 REJECT by human reviewer",
+            "terminal_gate_id": GateId.GATE_3.value,
+        }
+
     if gate_decision == "EDIT":
         try:
             updated_counts = increment_revision_loop(state, "GATE_3")
@@ -549,6 +636,7 @@ def factor_suggest_node(state: WorkflowState) -> dict:
                 "active_gate_id": None,
                 "completed": True,
                 "denial_reason": "Gate 3 revision loop cap exceeded after 3 attempts",
+                "terminal_gate_id": GateId.GATE_3.value,
             }
 
     return {
@@ -587,12 +675,29 @@ def ssdd_draft_node(state: WorkflowState) -> dict:
 
     if should_block:
         esc_id = _create_escalation(state, GateId.GATE_4, reasons, grounding_status, conf, ai_run_id=ai_run_id)
+        log.warning("ssdd_draft_node BLOCKED grounding=%s esc=%s — interrupting for human decision", grounding_status.value, esc_id)
+        gate_decision: str = interrupt({
+            "workflow_run_id": state["workflow_run_id"],
+            "hitl_gate": "GATE_4",
+            "ai_run_id": ai_run_id,
+            "grounding_status": grounding_status.value,
+            "confidence_score": conf,
+            "human_review_reasons": [r.value for r in reasons],
+            "escalation_id": esc_id,
+            "requires_human_review": True,
+            "blocked": True,
+        })
         return {
-            "active_gate_id": GateId.GATE_4.value,
-            "gate_states": {**state.get("gate_states", {}), "GATE_4": "BLOCKED"},
+            "active_gate_id": None,
+            "gate_states": {**state.get("gate_states", {}), "GATE_4": gate_decision},
             "pending_escalation_ids": [*state.get("pending_escalation_ids", []), esc_id],
             "ai_run_ids": ai_run_ids,
+            "denial_reason": "DO_NOT_AWARD decision by Grants Officer" if gate_decision == "DO_NOT_AWARD" else None,
         }
+
+    if grounding_status == GroundingStatus.LOW_CONFIDENCE:
+        _create_escalation(state, GateId.GATE_4, reasons, grounding_status, conf, ai_run_id=ai_run_id)
+        log.info("ssdd_draft_node LOW_CONFIDENCE escalation created grounding=%s", grounding_status.value)
 
     bedrock = _bedrock_with_idempotency(
         prompt=(
@@ -658,9 +763,9 @@ def route_gate_1(state: WorkflowState) -> str:
     decision = (state.get("gate_states") or {}).get("GATE_1", "PENDING")
     if decision == "APPROVE":
         return "reviewer_assignment"
-    if decision in ("RETURN_FOR_FIXES", "BLOCKED"):
+    if decision == "RETURN_FOR_FIXES":
         return "eligibility"
-    return "__end__"
+    return "__end__"  # REJECT, PENDING, or post-BLOCKED decision → terminal
 
 
 def route_gate_2(state: WorkflowState) -> str:

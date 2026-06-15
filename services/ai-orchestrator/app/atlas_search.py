@@ -33,6 +33,10 @@ VECTOR_INDEX = "corpus_chunks_vector_idx"
 EMBEDDING_MODEL_ID = "amazon.titan-embed-text-v2:0"
 EMBEDDING_DIMENSIONS = 1024  # titan-embed-text-v2 native dimension
 
+# Sentinel tenant value for shared regulatory corpus (2 CFR 200, 45 CFR 75).
+# Must match cache_validator._GLOBAL_TENANT_SENTINEL.
+GLOBAL_TENANT_SENTINEL = "global"
+
 
 @lru_cache(maxsize=1)
 def _get_atlas_client() -> MongoClient:
@@ -51,24 +55,20 @@ def get_embedding(text: str) -> List[float]:
     """
     Embed text with Amazon Titan Text Embeddings v2 via Bedrock.
     boto3 imported lazily — keeps tests runnable without AWS deps installed.
-    Falls back to zero vector on any error; grounding check surfaces low-confidence.
+    Raises on failure — callers must not search with a zero vector.
     """
-    try:
-        import boto3  # lazy — not needed for non-Atlas paths
-        client = boto3.client(
-            "bedrock-runtime",
-            region_name=os.getenv("AWS_REGION", "us-east-1"),
-        )
-        body = json.dumps({
-            "inputText": text,
-            "dimensions": EMBEDDING_DIMENSIONS,
-            "normalize": True,
-        })
-        resp = client.invoke_model(modelId=EMBEDDING_MODEL_ID, body=body)
-        return json.loads(resp["body"].read())["embedding"]
-    except Exception as exc:
-        log.warning("Bedrock embedding failed (%s) — zero vector returned", exc)
-        return [0.0] * EMBEDDING_DIMENSIONS
+    import boto3  # lazy — not needed for non-Atlas paths
+    client = boto3.client(
+        "bedrock-runtime",
+        region_name=os.getenv("AWS_REGION", "us-east-1"),
+    )
+    body = json.dumps({
+        "inputText": text,
+        "dimensions": EMBEDDING_DIMENSIONS,
+        "normalize": True,
+    })
+    resp = client.invoke_model(modelId=EMBEDDING_MODEL_ID, body=body)
+    return json.loads(resp["body"].read())["embedding"]
 
 
 # ---------------------------------------------------------------------------
@@ -131,9 +131,10 @@ def vector_search(
     """
     if not ATLAS_RETRIEVAL_ENABLED:
         return []
+    db = get_atlas_db()
+    # get_embedding raises on failure — never proceeds with a zero vector
+    query_embedding = get_embedding(query_text)
     try:
-        db = get_atlas_db()
-        query_embedding = get_embedding(query_text)
         pipeline = [
             {
                 "$vectorSearch": {
@@ -143,7 +144,7 @@ def vector_search(
                     "numCandidates": limit * 4,
                     "limit": limit,
                     "filter": {
-                        "tenant_id": {"$in": [tenant_id, "global"]},
+                        "tenant_id": {"$in": [tenant_id, GLOBAL_TENANT_SENTINEL]},
                     },
                 }
             },
@@ -175,5 +176,5 @@ def vector_search(
             for doc in docs
         ]
     except Exception as exc:
-        log.warning("Atlas vector_search failed (%s) — falling back to static corpus", exc)
+        log.warning("Atlas vector_search aggregation failed (%s) — falling back to static corpus", exc)
         return []
