@@ -82,6 +82,37 @@ app.include_router(retrieval_v2_router.router)
 app.include_router(workflow_router.router)
 
 
+@app.on_event("startup")
+def _log_runtime_config() -> None:
+    # SDK checks LANGSMITH_TRACING (newer) and LANGCHAIN_TRACING_V2 (legacy alias)
+    tracing_on = (
+        os.environ.get("LANGSMITH_TRACING", "").lower() in ("1", "true")
+        or os.environ.get("LANGCHAIN_TRACING_V2", "").lower() in ("1", "true")
+    )
+    project = os.environ.get("LANGCHAIN_PROJECT", "(not set)")
+    has_key = bool(os.environ.get("LANGSMITH_API_KEY") or os.environ.get("LANGCHAIN_API_KEY"))
+    log.info(
+        "LangSmith tracing=%s project=%s api_key_set=%s",
+        tracing_on, project, has_key,
+    )
+    if not tracing_on:
+        log.warning(
+            "LangSmith tracing DISABLED — set LANGSMITH_TRACING=true "
+            "and LANGSMITH_API_KEY=lsv2_... to enable traces"
+        )
+
+    # Probe Bedrock creds — tells operator whether real InvokeModel will run
+    from app.bedrock_client import _get_client, BEDROCK_MODEL_ID, AWS_REGION
+    client = _get_client()
+    if client is not None:
+        log.info("Bedrock client READY model=%s region=%s (real InvokeModel)", BEDROCK_MODEL_ID, AWS_REGION)
+    else:
+        log.warning(
+            "Bedrock client UNAVAILABLE — invoke_model will return stubs. "
+            "Run `aws configure sso` or set AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY."
+        )
+
+
 class DraftRequest(BaseModel):
     """
     ⚠ DELIBERATE — Item 4 reinforcement:

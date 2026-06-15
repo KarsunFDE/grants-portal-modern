@@ -11,4 +11,5 @@ RUN npm run build
 # ⚠ Item 11 — nginx:latest also
 FROM nginx:latest
 COPY --from=build /workspace/dist/grants-portal-modern-frontend/browser /usr/share/nginx/html
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 80

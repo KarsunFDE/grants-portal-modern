@@ -24,39 +24,62 @@ class AuditTrailService:
         """
         Write gate decision to append-only hitl_audit_trail collection.
         Never updates — always inserts a new document.
-        Returns gate_decision_id.
+        Returns gate_decision_id. On MongoDB failure, logs for replay and continues
+        so the calling workflow node is not blocked.
         """
         db = get_db()
         doc = record.model_dump(mode="json")
         doc["_type"] = "gate_decision"
-        db.hitl_audit_trail.insert_one(doc)
-        log.info(
-            "gate_decision recorded gate=%s decision=%s actor=%s tenant=%s id=%s",
-            record.gate_id.value,
-            record.decision.value,
-            record.actor_id,
-            record.tenant_id,
-            record.gate_decision_id,
-        )
+        try:
+            db.hitl_audit_trail.insert_one(doc)
+            log.info(
+                "gate_decision recorded gate=%s decision=%s actor=%s tenant=%s id=%s",
+                record.gate_id.value,
+                record.decision.value,
+                record.actor_id,
+                record.tenant_id,
+                record.gate_decision_id,
+            )
+        except Exception as exc:
+            log.error(
+                "audit_gate_decision_write_failed gate=%s decision=%s tenant=%s id=%s error=%s"
+                " — record requires manual replay",
+                record.gate_id.value,
+                record.decision.value,
+                record.tenant_id,
+                record.gate_decision_id,
+                exc,
+            )
         return record.gate_decision_id
 
     def record_escalation(self, record: EscalationRecord) -> str:
         """
         Write escalation to audit trail AND dedicated hitl_escalations collection.
-        Returns escalation_id. No silent retries — every failure creates a record.
+        Returns escalation_id. On MongoDB failure, logs for replay and continues
+        so the calling workflow node is not blocked.
         """
         db = get_db()
         doc = record.model_dump(mode="json")
         doc["_type"] = "escalation"
-        db.hitl_audit_trail.insert_one(dict(doc))
-        db.hitl_escalations.insert_one(dict(doc))
-        log.info(
-            "escalation recorded gate=%s tenant=%s reasons=%s id=%s",
-            record.gate_id.value,
-            record.tenant_id,
-            [r.value for r in record.human_review_reasons],
-            record.escalation_id,
-        )
+        try:
+            db.hitl_audit_trail.insert_one(dict(doc))
+            db.hitl_escalations.insert_one(dict(doc))
+            log.info(
+                "escalation recorded gate=%s tenant=%s reasons=%s id=%s",
+                record.gate_id.value,
+                record.tenant_id,
+                [r.value for r in record.human_review_reasons],
+                record.escalation_id,
+            )
+        except Exception as exc:
+            log.error(
+                "audit_escalation_write_failed gate=%s tenant=%s id=%s error=%s"
+                " — record requires manual replay",
+                record.gate_id.value,
+                record.tenant_id,
+                record.escalation_id,
+                exc,
+            )
         return record.escalation_id
 
     def get_gate_decision(self, gate_decision_id: str) -> Optional[dict]:

@@ -40,6 +40,7 @@ import java.util.List;
  *   GET     /api/grant-applications/{id}/proposals
  *   POST    /api/grant-applications/{id}/proposals/{pid}/acknowledge-amendment
  */
+@CrossOrigin
 @RestController
 @RequestMapping("/api/grant-applications")
 public class GrantApplicationController {

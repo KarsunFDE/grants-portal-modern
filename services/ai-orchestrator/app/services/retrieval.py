@@ -27,6 +27,13 @@ from app.schemas.hitl import (
 
 log = logging.getLogger("ai-orchestrator.retrieval")
 
+try:
+    from langsmith import traceable as _traceable
+except ImportError:  # pragma: no cover
+    def _traceable(**_kw):
+        def _d(fn): return fn
+        return _d
+
 CACHE_TTL_HOURS = 24
 
 
@@ -107,6 +114,7 @@ def _make_cache_key(query: str, tenant_id: str, corpus_version: str) -> str:
 
 
 class RetrievalService:
+    @_traceable(name="retrieval_service.retrieve", run_type="retriever", tags=["rag", "2cfr200"])
     def retrieve(
         self,
         query: str,

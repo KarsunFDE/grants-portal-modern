@@ -23,6 +23,7 @@ import java.util.stream.Collectors;
  * ⚠ Item 10 — listing crosses agency lines (intentional for "public" but
  *   reinforces the leak pattern).
  */
+@CrossOrigin
 @RestController
 @RequestMapping("/api/public/opportunities")
 public class PublicOpportunitiesController {

@@ -46,6 +46,15 @@ except ImportError:  # pragma: no cover
     boto3 = None  # type: ignore[assignment]
     _BOTO_AVAILABLE = False
 
+try:
+    from langsmith import traceable as _ls_traceable
+    _LANGSMITH_AVAILABLE = True
+except ImportError:  # pragma: no cover
+    def _ls_traceable(**_kw):  # type: ignore[misc]
+        def _d(fn): return fn
+        return _d
+    _LANGSMITH_AVAILABLE = False
+
 log = logging.getLogger("ai-orchestrator.bedrock")
 
 BEDROCK_MODEL_ID = os.environ.get(
@@ -69,6 +78,7 @@ def _get_client():
     return _client
 
 
+@_ls_traceable(name="invoke_model", run_type="llm")
 def invoke_model(prompt: str, *, system: str | None = None,
                   max_tokens: int = 1024,
                   temperature: float = 0.2) -> dict[str, Any]:

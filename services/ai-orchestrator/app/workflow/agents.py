@@ -15,6 +15,13 @@ from pydantic import BaseModel
 
 log = logging.getLogger("ai-orchestrator.agents")
 
+try:
+    from langsmith import traceable as _traceable
+except ImportError:  # pragma: no cover
+    def _traceable(**_kw):
+        def _d(fn): return fn
+        return _d
+
 
 # ---------------------------------------------------------------------------
 # Data models
@@ -40,6 +47,7 @@ class COIFlag(BaseModel):
 # Agent 1: reviewer assignment
 # ---------------------------------------------------------------------------
 
+@_traceable(name="run_reviewer_assignment", run_type="chain", tags=["multi-agent", "reviewer-panel"])
 def run_reviewer_assignment(
     program_area: str,
     required_expertise: List[str],
@@ -121,6 +129,7 @@ def _parse_reviewer_candidates(body: str, application_id: str) -> List[ReviewerC
 # Agent 2: COI check (deterministic — NOT AI judgment)
 # ---------------------------------------------------------------------------
 
+@_traceable(name="run_coi_check", run_type="chain", tags=["multi-agent", "coi-deterministic"])
 def run_coi_check(
     candidates: List[ReviewerCandidate],
     applicant_uei: Optional[str],
@@ -208,6 +217,7 @@ def _levenshtein(s: str, t: str) -> int:
 # Agent 3: panel confirmation
 # ---------------------------------------------------------------------------
 
+@_traceable(name="run_panel_confirmation", run_type="chain", tags=["multi-agent", "panel-confirmation"])
 def run_panel_confirmation(
     final_reviewers: List[ReviewerCandidate],
     gate_decision: str,
