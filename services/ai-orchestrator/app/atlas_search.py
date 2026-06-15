@@ -14,6 +14,8 @@ from __future__ import annotations
 import json
 import logging
 import os
+import urllib.error
+import urllib.request
 from functools import lru_cache
 from typing import List
 
@@ -47,24 +49,41 @@ def get_atlas_db() -> Database:
 # Bedrock embedding
 # ---------------------------------------------------------------------------
 
+_BEARER_TOKEN = os.environ.get("AWS_BEARER_TOKEN_BEDROCK", "")
+_AWS_REGION = os.environ.get("AWS_REGION", "us-east-1")
+
+
 def get_embedding(text: str) -> List[float]:
     """
     Embed text with Amazon Titan Text Embeddings v2 via Bedrock.
-    boto3 imported lazily — keeps tests runnable without AWS deps installed.
+    Uses bearer token (AWS_BEARER_TOKEN_BEDROCK) if set, else falls back to boto3 IAM.
     Raises RuntimeError on failure — callers must NOT fall back to a zero vector.
     ADR 0009 §4: zero vector yields cosine similarity of 0 for all docs (meaningless ranking).
     """
+    body = json.dumps({
+        "inputText": text,
+        "dimensions": EMBEDDING_DIMENSIONS,
+        "normalize": True,
+    }).encode("utf-8")
+
+    if _BEARER_TOKEN:
+        encoded_model = EMBEDDING_MODEL_ID.replace(":", "%3A")
+        url = f"https://bedrock-runtime.{_AWS_REGION}.amazonaws.com/model/{encoded_model}/invoke"
+        req = urllib.request.Request(
+            url, data=body,
+            headers={"Authorization": f"Bearer {_BEARER_TOKEN}",
+                     "Content-Type": "application/json", "Accept": "application/json"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                return json.loads(resp.read())["embedding"]
+        except Exception as exc:
+            raise RuntimeError(f"Bedrock bearer-token embedding failed: {exc}") from exc
+
     try:
         import boto3  # lazy — not needed for non-Atlas paths
-        client = boto3.client(
-            "bedrock-runtime",
-            region_name=os.getenv("AWS_REGION", "us-east-1"),
-        )
-        body = json.dumps({
-            "inputText": text,
-            "dimensions": EMBEDDING_DIMENSIONS,
-            "normalize": True,
-        })
+        client = boto3.client("bedrock-runtime", region_name=_AWS_REGION)
         resp = client.invoke_model(modelId=EMBEDDING_MODEL_ID, body=body)
         return json.loads(resp["body"].read())["embedding"]
     except Exception as exc:

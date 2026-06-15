@@ -119,6 +119,15 @@ def _log_runtime_config() -> None:
             "Run `aws configure sso` or set AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY."
         )
 
+    # Ensure Atlas vector search index exists (no-op if already present).
+    # Runs at every startup so the index survives volume recreations without
+    # requiring a manual ingest_corpus.py run.
+    try:
+        from app.atlas_search import get_atlas_db, ensure_vector_index
+        ensure_vector_index(get_atlas_db())
+    except Exception as exc:
+        log.warning("Atlas startup ensure_vector_index failed (non-fatal): %s", exc)
+
 
 class DraftRequest(BaseModel):
     """
