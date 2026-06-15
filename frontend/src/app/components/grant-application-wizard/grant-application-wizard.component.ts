@@ -2,8 +2,11 @@ import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
+import { HttpClient } from '@angular/common/http';
 import { GrantApplicationService } from '../../services/grant-application.service';
 import { GrantApplication, GrantApplicationCreate, GrantApplicationSections } from '../../models/grant-application';
+
+const ORCH_URL = 'http://localhost:8000';
 
 /**
  * Multi-step Grant Application Wizard (SF-424 + 2 CFR 200 intake).
@@ -101,7 +104,9 @@ import { GrantApplication, GrantApplicationCreate, GrantApplicationSections } fr
         Project narrative — AI-drafted via <code>POST /draft-grant-application</code> (ai-orchestrator).
         ⚠ Debt Item 4 (no Pydantic schema), Item 5 (legacy LLMChain.run wired here).
       </p>
-      <button class="secondary" (click)="aiDraft('projectNarrative')">▦ AI-draft project narrative</button>
+      <button class="secondary" (click)="aiDraft('projectNarrative')" [disabled]="draftLoading">
+        {{ draftLoading ? '⏳ Drafting…' : '▦ AI-draft project narrative' }}
+      </button>
       <textarea name="projectNarrative" rows="10" [(ngModel)]="sections.projectNarrative"
                 style="margin-top:0.5rem"></textarea>
     </div>
@@ -165,6 +170,7 @@ export class GrantApplicationWizardComponent {
   steps = ['Opportunity', 'Applicant', 'Project', 'Budget', 'Review'];
   step = 0;
   submitting = false;
+  draftLoading = false;
   error: string | null = null;
 
   model: GrantApplicationCreate = {
@@ -186,7 +192,7 @@ export class GrantApplicationWizardComponent {
 
   sections: GrantApplicationSections = {};
 
-  constructor(private svc: GrantApplicationService, private router: Router) {}
+  constructor(private svc: GrantApplicationService, private router: Router, private http: HttpClient) {}
 
   back(): void {
     if (this.step > 0) this.step--;
@@ -197,21 +203,28 @@ export class GrantApplicationWizardComponent {
   }
 
   aiDraft(section: 'projectNarrative'): void {
-    // Stubbed — in W2 this hits POST /draft-grant-application through the
-    // gateway. For instructor demo, populate plausible placeholder text.
-    this.sections.projectNarrative =
-      `1. SIGNIFICANCE. This project addresses a documented need served by ` +
-      `${this.model.awardingAgency || 'the awarding agency'} under Assistance Listing ` +
-      `${this.model.assistanceListingNumber || '[ALN]'}. ` +
-      `${this.model.description || '[project abstract not yet entered]'}\n\n` +
-      `2. APPROACH. ${this.model.applicantOrg || 'The applicant organization'} will ` +
-      `execute the following objectives over the period of performance:\n` +
-      `Objective 1: Program design and stakeholder engagement\n` +
-      `Objective 2: Service delivery and capacity building\n` +
-      `Objective 3: Performance measurement and reporting (2 CFR 200.301)\n\n` +
-      `3. FEASIBILITY. The Principal Investigator, ${this.model.principalInvestigator || '[PI]'}, ` +
-      `brings relevant experience; the budget and timeline are realistic for the proposed scope.\n\n` +
-      `[AI-DRAFTED placeholder — to be reviewed by the Program Officer / PI before submission. Item 4 / Item 5 surface.]`;
+    this.draftLoading = true;
+    const topic = [
+      this.model.title,
+      this.model.applicantOrg,
+      this.model.description,
+    ].filter(Boolean).join(' — ') || 'federal grant project narrative';
+    const constraints =
+      `2 CFR 200 compliant; awarding agency: ${this.model.awardingAgency || 'federal'}; ` +
+      `ALN: ${this.model.assistanceListingNumber || 'N/A'}; ` +
+      `applicant type: ${this.model.applicantType}; ` +
+      `PI: ${this.model.principalInvestigator || 'TBD'}. ` +
+      `Structure as: 1. SIGNIFICANCE  2. APPROACH  3. FEASIBILITY`;
+    this.http.post<{ draft: string }>(`${ORCH_URL}/draft-grant-application`, { topic, constraints })
+      .subscribe({
+        next: (r) => {
+          this.sections.projectNarrative = r.draft;
+          this.draftLoading = false;
+        },
+        error: () => {
+          this.draftLoading = false;
+        },
+      });
   }
 
   submit(): void {
