@@ -17,7 +17,7 @@ MAX_CACHE_AGE_HOURS = 24
 
 # Sentinel for shared regulatory corpus (2 CFR 200, 45 CFR 75).
 # Must match atlas_search.GLOBAL_TENANT_SENTINEL.
-_GLOBAL_TENANT_SENTINEL = "global"
+_GLOBAL_TENANT_SENTINEL = "__global__"
 
 
 def validate_before_generation(
