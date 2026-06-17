@@ -197,17 +197,17 @@ class TestAuditDurability:
             "tenant_id": "tenant-abc",
             "_type": "gate_decision",
         }
-        result = audit_trail_service.get_gate_decision("gd-001")
+        result = audit_trail_service.get_gate_decision("gd-001", "tenant-abc")
         assert result is not None
         assert result["gate_decision_id"] == "gd-001"
         mock_db.hitl_audit_trail.find_one.assert_called_with(
-            {"gate_decision_id": "gd-001", "_type": "gate_decision"},
+            {"gate_decision_id": "gd-001", "_type": "gate_decision", "tenant_id": "tenant-abc"},
             {"_id": 0},
         )
 
     def test_get_gate_decision_returns_none_when_not_found(self, mock_db):
         mock_db.hitl_audit_trail.find_one.return_value = None
-        result = audit_trail_service.get_gate_decision("nonexistent")
+        result = audit_trail_service.get_gate_decision("nonexistent", "tenant-abc")
         assert result is None
 
     def test_list_gate_decisions_filters_by_tenant(self, mock_db):
@@ -361,5 +361,5 @@ class TestAuditViaAPI:
 
     def test_gate_decision_not_found_returns_404(self, client, mock_db):
         mock_db.hitl_audit_trail.find_one.return_value = None
-        resp = client.get("/gates/decision/nonexistent-id")
+        resp = client.get("/gates/decision/nonexistent-id", headers={"X-Tenant-Id": "tenant-abc"})
         assert resp.status_code == 404

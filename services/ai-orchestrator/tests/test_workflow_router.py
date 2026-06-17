@@ -64,7 +64,7 @@ class TestWorkflowStartAndStatus:
             "grant_application_id": "app-001",
             "raw_text": "Federal grant application text.",
             "topic": "biomedical research",
-        })
+        }, headers={"X-Tenant-Id": "tenant-abc"})
         assert resp.status_code == 200
         body = resp.json()
         assert "workflow_run_id" in body
@@ -87,7 +87,7 @@ class TestWorkflowStartAndStatus:
             next=["eligibility"],
             tasks=[],
         )
-        resp = workflow_client.get("/workflow/run-gate1/status")
+        resp = workflow_client.get("/workflow/run-gate1/status", headers={"X-Tenant-Id": "tenant-abc"})
         assert resp.status_code == 200
         body = resp.json()
         assert body["status"] == "PAUSED_AT_GATE"
@@ -114,7 +114,7 @@ class TestWorkflowStartAndStatus:
             next=[],
             tasks=[],
         )
-        resp = workflow_client.get("/workflow/run-done/status")
+        resp = workflow_client.get("/workflow/run-done/status", headers={"X-Tenant-Id": "t1"})
         assert resp.status_code == 200
         assert resp.json()["status"] == "COMPLETED"
 
@@ -134,7 +134,7 @@ class TestWorkflowStartAndStatus:
             next=[],
             tasks=[],
         )
-        resp = workflow_client.get("/workflow/run-denied/status")
+        resp = workflow_client.get("/workflow/run-denied/status", headers={"X-Tenant-Id": "t1"})
         assert resp.status_code == 200
         body = resp.json()
         assert body["status"] == "DENIED"
@@ -179,7 +179,7 @@ class TestWorkflowResume:
             "actor_id": "user1",
             "actor_role": "GRANTS_OFFICER",
             "rationale": "test",
-        })
+        }, headers={"X-Tenant-Id": "t1"})
         assert resp.status_code == 422
         assert "completed" in resp.json()["detail"].lower() or "denied" in resp.json()["detail"].lower()
 
@@ -205,7 +205,7 @@ class TestWorkflowResume:
             "actor_id": "user1",
             "actor_role": "GRANTS_OFFICER",
             "rationale": "test",
-        })
+        }, headers={"X-Tenant-Id": "t1"})
         assert resp.status_code == 422
 
 
@@ -248,7 +248,7 @@ class TestActiveGateIdFromInterruptPayload:
             tasks=[task_mock],
         )
 
-        resp = workflow_client.get("/workflow/run-interrupt/status")
+        resp = workflow_client.get("/workflow/run-interrupt/status", headers={"X-Tenant-Id": "t1"})
         assert resp.status_code == 200
         body = resp.json()
         assert body["active_gate_id"] == "GATE_1", (

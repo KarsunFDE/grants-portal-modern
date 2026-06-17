@@ -34,5 +34,5 @@ pinecone-client==5.0.1
 python-multipart==0.0.12
 
 
-# Langsmith
-langsmith
+# Langsmith — pinned for reproducibility; unpinned transitive dep is a supply-chain gap
+langsmith>=0.1.0,<0.2.0

@@ -89,10 +89,12 @@ def _build_response(workflow_run_id: str, snapshot_info: Optional[dict]) -> Work
     completed = state.get("completed", False)
     denial_reason = state.get("denial_reason")
 
-    if completed:
-        status = "COMPLETED"
-    elif denial_reason:
+    if denial_reason:
+        # Check denial_reason BEFORE completed: both can be set simultaneously
+        # (e.g. REJECT path sets completed=True AND denial_reason). Denial wins.
         status = "DENIED"
+    elif completed:
+        status = "COMPLETED"
     elif is_paused:
         status = "PAUSED_AT_GATE"
     else:
@@ -152,6 +154,23 @@ def _acquire_resume_lock(workflow_run_id: str, active_gate_id: str) -> bool:
     except Exception as exc:
         log.warning("resume_lock acquisition failed (%s) — rejecting to prevent double-advance", exc)
         return False
+
+
+def _release_resume_lock(workflow_run_id: str, active_gate_id: str) -> None:
+    """Delete the per-(run, gate) resume lock. Called in finally after resume completes or errors."""
+    try:
+        from app.db import get_db
+        db = get_db()
+        db.resume_locks.delete_one({
+            "workflow_run_id": workflow_run_id,
+            "active_gate_id": active_gate_id,
+        })
+    except Exception as exc:
+        log.warning(
+            "resume_lock release failed run=%s gate=%s: %s — "
+            "lock document may persist; TTL index or manual cleanup required",
+            workflow_run_id, active_gate_id, exc,
+        )
 
 
 def _apply_supervisor_override(workflow_run_id: str, denial: str, state: dict) -> None:
@@ -216,7 +235,13 @@ def start_workflow(
     from app.workflow.graph import get_graph, get_workflow_state
     from app.workflow.state import make_initial_state
 
-    if x_tenant_id and x_tenant_id != req.tenant_id:
+    if not x_tenant_id:
+        raise HTTPException(
+            403,
+            "X-Tenant-Id header required. In production, the API Gateway derives this from "
+            "verified JWT claims. Requests without tenant context are rejected.",
+        )
+    if x_tenant_id != req.tenant_id:
         raise HTTPException(
             403,
             f"tenant_id body mismatch with X-Tenant-Id header "
@@ -246,6 +271,10 @@ def start_workflow(
 
     try:
         graph.invoke(initial_state, config=config)
+    except ValueError as node_exc:
+        # ValueError from a node (e.g. missing ai_run_id) is a real error — not a normal interrupt.
+        # Raise 500 so callers are not silently handed a stale PAUSED_AT_GATE response.
+        raise HTTPException(500, f"Workflow node error during start: {node_exc}") from node_exc
     except Exception as exc:
         # Graph may raise on interrupt in some LangGraph versions; state is checkpointed
         log.info("workflow invoke stopped (interrupt or completion): %s", exc)
@@ -281,18 +310,21 @@ def resume_workflow(
 
     state = snapshot.get("state", {})
 
-    # Tenant check — X-Tenant-Id must match the workflow's stored tenant
+    # Tenant check — X-Tenant-Id is required on every resume; absent header → 403.
+    # In production the API Gateway sets this from JWT claims; frontend cannot forge it.
+    # NOTE: actor_id/actor_role are currently taken from the request body (demo limitation).
+    # TODO: derive both from authenticated principal claims once full auth wiring lands.
     stored_tenant = state.get("tenant_id", "")
-    if x_tenant_id and x_tenant_id != stored_tenant:
+    if not x_tenant_id:
+        raise HTTPException(
+            403,
+            "X-Tenant-Id header required. In production, the API Gateway derives this from "
+            "verified JWT claims. Requests without tenant context are rejected.",
+        )
+    if x_tenant_id != stored_tenant:
         raise HTTPException(
             403,
             f"X-Tenant-Id {x_tenant_id!r} does not match workflow tenant {stored_tenant!r}.",
-        )
-    if not x_tenant_id:
-        log.warning(
-            "resume_workflow run=%s: X-Tenant-Id header absent — "
-            "API Gateway must set this from JWT claims in production",
-            req.workflow_run_id,
         )
 
     denial = state.get("denial_reason", "") or ""
@@ -325,61 +357,89 @@ def resume_workflow(
             "already in progress — retry after the current resume completes.",
         )
 
-    # Resolve ai_run_id — must be traceable to a real AI run; never fabricate
-    from app.schemas.hitl import GateDecision, GroundingStatus
-    pending = (snapshot.get("pending_interrupts") or [{}])[0]
-    ai_run_id = (
-        pending.get("ai_run_id")
-        or (state.get("ai_run_ids") or {}).get(active_gate_id or "", "")
-    )
-    if not ai_run_id:
-        raise HTTPException(
-            422,
-            f"Cannot resolve ai_run_id for gate {active_gate_id!r}: interrupt payload missing "
-            "ai_run_id and no prior ai_run_ids entry. Resume aborted to preserve audit integrity.",
-        )
-
     try:
-        decision_enum = GateDecision(req.gate_decision)
-    except ValueError as exc:
-        raise HTTPException(422, f"Invalid gate_decision: {exc}")
-
-    # Audit write is a hard precondition — validation errors (role/decision) → 403/422;
-    # infrastructure errors → 503. Never advance the graph without a committed record.
-    try:
-        gate_enforcer.record_decision(GateDecisionRequest(
-            gate_id=GateId(active_gate_id),
-            actor_id=req.actor_id,
-            actor_role=GateOwnerRole(req.actor_role),
-            tenant_id=stored_tenant,
-            ai_run_id=ai_run_id,
-            decision=decision_enum,
-            rationale=req.rationale,
-            override_flag=req.override_flag,
-            confidence_score=float(pending.get("confidence_score", 0.0)),
-            grounding_status=GroundingStatus(
-                pending.get("grounding_status", "UNGROUNDED")
-            ),
-        ))
-    except ValueError as exc:
-        raise HTTPException(
-            403,
-            f"Gate decision rejected — role or decision not authorized: {exc}",
+        # Resolve ai_run_id — must be traceable to a real AI run; never fabricate
+        from app.schemas.hitl import GateDecision, GroundingStatus
+        pending = (snapshot.get("pending_interrupts") or [{}])[0]
+        ai_run_id = (
+            pending.get("ai_run_id")
+            or (state.get("ai_run_ids") or {}).get(active_gate_id or "", "")
         )
-    except Exception as audit_exc:
-        raise HTTPException(
-            503,
-            f"Audit write failed; gate decision not recorded and graph not advanced. "
-            f"Retry when storage is available. Detail: {audit_exc}",
-        )
+        if not ai_run_id:
+            raise HTTPException(
+                422,
+                f"Cannot resolve ai_run_id for gate {active_gate_id!r}: interrupt payload missing "
+                "ai_run_id and no prior ai_run_ids entry. Resume aborted to preserve audit integrity.",
+            )
 
-    # Resume LangGraph execution — audit record committed above
-    config = _run_config(req.workflow_run_id)
-    graph = get_graph()
-    try:
-        graph.invoke(Command(resume=req.gate_decision), config=config)
-    except Exception as exc:
-        log.info("workflow resume stopped (interrupt or completion): %s", exc)
+        try:
+            decision_enum = GateDecision(req.gate_decision)
+        except ValueError as exc:
+            raise HTTPException(422, f"Invalid gate_decision: {exc}")
+
+        # Audit write is a hard precondition — validation errors (role/decision) → 403/422;
+        # infrastructure errors → 503. Never advance the graph without a committed record.
+        # Citation evidence from the pending interrupt is persisted so approvers' view is
+        # reconstructible post-award (2 CFR 200.205 / ADR 0009 §10).
+        try:
+            gate_record = gate_enforcer.record_decision(GateDecisionRequest(
+                gate_id=GateId(active_gate_id),
+                actor_id=req.actor_id,
+                actor_role=GateOwnerRole(req.actor_role),
+                tenant_id=stored_tenant,
+                ai_run_id=ai_run_id,
+                decision=decision_enum,
+                rationale=req.rationale,
+                override_flag=req.override_flag,
+                retrieved_sources=pending.get("retrieved_sources") or [],
+                citation_refs=pending.get("citation_refs") or [],
+                confidence_score=float(pending.get("confidence_score", 0.0)),
+                grounding_status=GroundingStatus(
+                    pending.get("grounding_status", "UNGROUNDED")
+                ),
+            ))
+        except ValueError as exc:
+            raise HTTPException(
+                403,
+                f"Gate decision rejected — role or decision not authorized: {exc}",
+            )
+        except Exception as audit_exc:
+            raise HTTPException(
+                503,
+                f"Audit write failed; gate decision not recorded and graph not advanced. "
+                f"Retry when storage is available. Detail: {audit_exc}",
+            )
+
+        config = _run_config(req.workflow_run_id)
+        graph = get_graph()
+
+        # Resume LangGraph execution — audit record committed above
+        try:
+            graph.invoke(Command(resume=req.gate_decision), config=config)
+        except ValueError as node_exc:
+            raise HTTPException(500, f"Workflow node error during resume: {node_exc}") from node_exc
+        except Exception as exc:
+            log.info("workflow resume stopped (interrupt or completion): %s", exc)
+
+        # Append gate_decision_id AFTER successful graph advance — avoids orphan IDs
+        # accumulating in state when graph.invoke fails and the client retries.
+        # Idempotency guard: skip if already appended (retry safety).
+        existing_ids = state.get("gate_decision_ids") or []
+        if gate_record.gate_decision_id not in existing_ids:
+            try:
+                graph.update_state(
+                    config,
+                    {"gate_decision_ids": [*existing_ids, gate_record.gate_decision_id]},
+                )
+            except Exception as exc:
+                log.warning(
+                    "gate_decision_ids state update failed run=%s gate=%s: %s — "
+                    "audit record committed; panel evidence linkage degraded",
+                    req.workflow_run_id, active_gate_id, exc,
+                )
+
+    finally:
+        _release_resume_lock(req.workflow_run_id, active_gate_id or "")
 
     snapshot = get_workflow_state(req.workflow_run_id)
     response = _build_response(req.workflow_run_id, snapshot)
@@ -402,11 +462,16 @@ def workflow_status(
     snapshot = get_workflow_state(workflow_run_id)
     if snapshot is None:
         raise HTTPException(404, f"Workflow {workflow_run_id!r} not found")
-    if x_tenant_id:
-        stored_tenant = snapshot.get("state", {}).get("tenant_id", "")
-        if stored_tenant and x_tenant_id != stored_tenant:
-            raise HTTPException(
-                403,
-                f"X-Tenant-Id {x_tenant_id!r} does not match workflow tenant.",
-            )
+    if not x_tenant_id:
+        raise HTTPException(
+            403,
+            "X-Tenant-Id header required. Workflow state (including pending AI output) "
+            "is tenant-scoped and must not be returned without verified tenant context.",
+        )
+    stored_tenant = snapshot.get("state", {}).get("tenant_id", "")
+    if stored_tenant and x_tenant_id != stored_tenant:
+        raise HTTPException(
+            403,
+            f"X-Tenant-Id {x_tenant_id!r} does not match workflow tenant.",
+        )
     return _build_response(workflow_run_id, snapshot)

@@ -311,11 +311,16 @@ class RetrievalService:
         # Layer 2: MongoDB clause_library text search
         if db is not None:
             try:
+                # Filter by tenant + global sentinel so Layer-2 never surfaces
+                # cross-tenant source material as in-tenant grounding evidence.
                 results = list(
                     db.clause_library.find(
-                        {"$text": {"$search": query}},
+                        {
+                            "$text": {"$search": query},
+                            "tenant_id": {"$in": [tenant_id, "__global__"]},
+                        },
                         {"score": {"$meta": "textScore"}, "clauseId": 1, "farPart": 1,
-                         "title": 1, "body": 1, "lastRevised": 1},
+                         "title": 1, "body": 1, "lastRevised": 1, "tenant_id": 1},
                         limit=3,
                     ).sort([("score", {"$meta": "textScore"})])
                 )
@@ -328,7 +333,9 @@ class RetrievalService:
                         section=far_part,
                         last_revised=doc.get("lastRevised"),
                         text_excerpt=(doc.get("body") or "")[:200] or None,
-                        tenant_id=tenant_id,
+                        # Preserve the document's real tenant_id rather than overwriting
+                        # with the caller's tenant — prevents false provenance attribution.
+                        tenant_id=doc.get("tenant_id") or tenant_id,
                         regulation="DFARS" if "DFARS" in far_part.upper() else "FAR",
                     ))
             except Exception:

@@ -50,6 +50,7 @@ class AuditTrailService:
                 record.gate_decision_id,
                 exc,
             )
+            raise  # propagate so caller's 503 guard fires; graph must not advance without a durable record
         return record.gate_decision_id
 
     def record_escalation(self, record: EscalationRecord) -> str:
@@ -80,12 +81,13 @@ class AuditTrailService:
                 record.escalation_id,
                 exc,
             )
+            raise  # propagate so caller can handle; no silent loss of escalation records
         return record.escalation_id
 
-    def get_gate_decision(self, gate_decision_id: str) -> Optional[dict]:
+    def get_gate_decision(self, gate_decision_id: str, tenant_id: str) -> Optional[dict]:
         db = get_db()
         return db.hitl_audit_trail.find_one(
-            {"gate_decision_id": gate_decision_id, "_type": "gate_decision"},
+            {"gate_decision_id": gate_decision_id, "_type": "gate_decision", "tenant_id": tenant_id},
             {"_id": 0},
         )
 

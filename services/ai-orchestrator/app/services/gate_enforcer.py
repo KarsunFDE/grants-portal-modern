@@ -147,6 +147,21 @@ class GateEnforcer:
                 f"Authorized roles: {[r.value for r in authorized]}"
             )
 
+        # Gate 4 AWARD requires GROUNDED or LOW_CONFIDENCE; blocks on UNGROUNDED/MISSING_CITATIONS.
+        # These statuses indicate the AI output has no regulatory basis — awarding without
+        # grounding violates 2 CFR 200.205 merit-review traceability requirements.
+        _AWARD_BLOCKING_GROUNDING = {GroundingStatus.UNGROUNDED, GroundingStatus.MISSING_CITATIONS}
+        if (
+            request.gate_id == GateId.GATE_4
+            and request.decision == GateDecision.AWARD
+            and request.grounding_status in _AWARD_BLOCKING_GROUNDING
+        ):
+            raise ValueError(
+                f"AWARD blocked: grounding_status={request.grounding_status.value}. "
+                "Re-retrieval to GROUNDED status is required before an award decision. "
+                "Submit DO_NOT_AWARD or RETURN_TO_REVIEW instead."
+            )
+
         # Tenant binding (hitl-plan.txt §Tenant Binding Invariant)
         for ref in request.evidence_refs:
             if ref.tenant_id != request.tenant_id:

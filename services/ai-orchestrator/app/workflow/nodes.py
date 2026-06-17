@@ -15,8 +15,14 @@ duplicate Bedrock calls (see orchestration.md §3 note on replay behaviour).
 from __future__ import annotations
 
 import logging
+import os
 import uuid
 from typing import List, Optional
+
+# When False (production default), a Bedrock stub response triggers a hard escalation
+# rather than flowing fabricated content into HITL gates. Set BEDROCK_STUB_ALLOWED=true
+# only on dev/test environments that intentionally run without AWS credentials.
+_BEDROCK_STUB_ALLOWED = os.environ.get("BEDROCK_STUB_ALLOWED", "true").lower() == "true"
 
 from langgraph.types import interrupt
 
@@ -293,6 +299,39 @@ def eligibility_node(state: WorkflowState) -> dict:
         query=query,
     )
 
+    if bedrock.get("stub") and not _BEDROCK_STUB_ALLOWED:
+        log.error(
+            "eligibility_node: Bedrock stub received in non-stub mode run=%s — "
+            "fabricated content must not flow to human reviewers; escalating hard block",
+            state["workflow_run_id"],
+        )
+        esc_id = _create_escalation(
+            state, GateId.GATE_1, [HumanReviewReason.UNGROUNDED],
+            GroundingStatus.UNGROUNDED, 0.0, ai_run_id=ai_run_id,
+        )
+        gate_decision: str = interrupt({
+            "workflow_run_id": state["workflow_run_id"],
+            "hitl_gate": "GATE_1",
+            "ai_run_id": ai_run_id,
+            "grounding_status": GroundingStatus.UNGROUNDED.value,
+            "confidence_score": 0.0,
+            "human_review_reasons": [HumanReviewReason.UNGROUNDED.value],
+            "escalation_id": esc_id,
+            "requires_human_review": True,
+            "blocked": True,
+            "bedrock_unavailable": True,
+        })
+        is_terminal = gate_decision == "REJECT"
+        return {
+            "active_gate_id": None,
+            "gate_states": {**state.get("gate_states", {}), "GATE_1": gate_decision},
+            "pending_escalation_ids": [*state.get("pending_escalation_ids", []), esc_id],
+            "ai_run_ids": ai_run_ids,
+            "completed": is_terminal,
+            "denial_reason": "Gate 1 REJECT after Bedrock unavailability" if is_terminal else None,
+            "terminal_gate_id": GateId.GATE_1.value if is_terminal else None,
+        }
+
     # HITL interrupt — pauses graph; resumes when gate owner submits decision
     gate_decision: str = interrupt({
         "workflow_run_id": state["workflow_run_id"],
@@ -458,10 +497,20 @@ def gate_2_node(state: WorkflowState) -> dict:
         "gate_2_node INTERRUPT workflow=%s flagged_reviewers=%d coi_detected=%s",
         state["workflow_run_id"], len(coi_flags), bool(coi_flags),
     )
+    # SCREENING ai_run_id must exist: eligibility_node always sets it before Gate 2 is reached.
+    # Fabricating a uuid here would break COI-decision traceability in the audit trail.
+    screening_ai_run_id = (state.get("ai_run_ids") or {}).get("SCREENING")
+    if not screening_ai_run_id:
+        raise ValueError(
+            "gate_2_node: SCREENING ai_run_id missing from state — "
+            "cannot interrupt Gate 2 without a traceable AI run reference. "
+            "Eligibility node must have run and set ai_run_ids['SCREENING'] before Gate 2."
+        )
+
     gate_decision: str = interrupt({
         "workflow_run_id": state["workflow_run_id"],
         "hitl_gate": "GATE_2",
-        "ai_run_id": (state.get("ai_run_ids") or {}).get("SCREENING") or str(uuid.uuid4()),
+        "ai_run_id": screening_ai_run_id,
         "coi_flags": coi_flags,
         "coi_detected": bool(coi_flags),
         "reviewer_candidates": state.get("reviewer_candidates"),
@@ -586,6 +635,38 @@ def factor_suggest_node(state: WorkflowState) -> dict:
         query=query,
     )
 
+    if bedrock.get("stub") and not _BEDROCK_STUB_ALLOWED:
+        log.error(
+            "factor_suggest_node: Bedrock stub received in non-stub mode run=%s — escalating hard block",
+            state["workflow_run_id"],
+        )
+        esc_id = _create_escalation(
+            state, GateId.GATE_3, [HumanReviewReason.UNGROUNDED],
+            GroundingStatus.UNGROUNDED, 0.0, ai_run_id=ai_run_id,
+        )
+        gate_decision: str = interrupt({
+            "workflow_run_id": state["workflow_run_id"],
+            "hitl_gate": "GATE_3",
+            "ai_run_id": ai_run_id,
+            "grounding_status": GroundingStatus.UNGROUNDED.value,
+            "confidence_score": 0.0,
+            "human_review_reasons": [HumanReviewReason.UNGROUNDED.value],
+            "escalation_id": esc_id,
+            "requires_human_review": True,
+            "blocked": True,
+            "bedrock_unavailable": True,
+        })
+        is_terminal = gate_decision == "REJECT"
+        return {
+            "active_gate_id": None,
+            "gate_states": {**state.get("gate_states", {}), "GATE_3": gate_decision},
+            "pending_escalation_ids": [*state.get("pending_escalation_ids", []), esc_id],
+            "ai_run_ids": ai_run_ids,
+            "completed": is_terminal,
+            "denial_reason": "Gate 3 REJECT after Bedrock unavailability" if is_terminal else None,
+            "terminal_gate_id": GateId.GATE_3.value if is_terminal else None,
+        }
+
     gate_decision: str = interrupt({
         "workflow_run_id": state["workflow_run_id"],
         "hitl_gate": "GATE_3",
@@ -687,6 +768,15 @@ def ssdd_draft_node(state: WorkflowState) -> dict:
             "requires_human_review": True,
             "blocked": True,
         })
+        # AWARD is not permitted when grounding is blocked — no regulatory basis exists.
+        # gate_enforcer._validate_or_raise also enforces this; this is defense-in-depth.
+        if gate_decision == "AWARD":
+            log.error(
+                "ssdd_draft_node: AWARD submitted on blocked-grounding path "
+                "run=%s grounding=%s — coercing to DO_NOT_AWARD",
+                state["workflow_run_id"], grounding_status.value,
+            )
+            gate_decision = "DO_NOT_AWARD"
         return {
             "active_gate_id": None,
             "gate_states": {**state.get("gate_states", {}), "GATE_4": gate_decision},
@@ -711,6 +801,38 @@ def ssdd_draft_node(state: WorkflowState) -> dict:
         gate_id=GateId.GATE_4.value,
         query=query,
     )
+
+    if bedrock.get("stub") and not _BEDROCK_STUB_ALLOWED:
+        log.error(
+            "ssdd_draft_node: Bedrock stub received in non-stub mode run=%s — "
+            "SSDD award memo cannot be fabricated; escalating hard block",
+            state["workflow_run_id"],
+        )
+        esc_id = _create_escalation(
+            state, GateId.GATE_4, [HumanReviewReason.UNGROUNDED],
+            GroundingStatus.UNGROUNDED, 0.0, ai_run_id=ai_run_id,
+        )
+        gate_decision: str = interrupt({
+            "workflow_run_id": state["workflow_run_id"],
+            "hitl_gate": "GATE_4",
+            "ai_run_id": ai_run_id,
+            "grounding_status": GroundingStatus.UNGROUNDED.value,
+            "confidence_score": 0.0,
+            "human_review_reasons": [HumanReviewReason.UNGROUNDED.value],
+            "escalation_id": esc_id,
+            "requires_human_review": True,
+            "blocked": True,
+            "bedrock_unavailable": True,
+        })
+        if gate_decision == "AWARD":
+            gate_decision = "DO_NOT_AWARD"
+        return {
+            "active_gate_id": None,
+            "gate_states": {**state.get("gate_states", {}), "GATE_4": gate_decision},
+            "pending_escalation_ids": [*state.get("pending_escalation_ids", []), esc_id],
+            "ai_run_ids": ai_run_ids,
+            "denial_reason": "DO_NOT_AWARD after Bedrock unavailability" if gate_decision == "DO_NOT_AWARD" else None,
+        }
 
     gate_decision: str = interrupt({
         "workflow_run_id": state["workflow_run_id"],
@@ -776,7 +898,9 @@ def route_gate_2(state: WorkflowState) -> str:
         return "reviewer_assignment"  # full re-panel: reassign from remaining pool
     if decision == "POOL_EXHAUSTED":
         return "__end__"   # escalated to Grants Officer; manual path
-    return "panel_confirmation"
+    # Fail-safe: any unrecognized or malformed decision terminates — unlike the old default
+    # which silently advanced to panel_confirmation on unknown input.
+    return "__end__"
 
 
 def route_gate_3(state: WorkflowState) -> str:
