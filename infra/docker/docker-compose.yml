@@ -39,6 +39,17 @@ services:
     volumes:
       - mongo-data:/data/db   # ← inconsistency vs postgres — teaching moment
 
+  # ADR 0007 Phase B — Atlas Local for vector search development.
+  # Same collection schema and index definitions as managed Atlas (ADR 0006 §2).
+  # Exposed on host port 27018 to avoid conflict with plain mongo above.
+  # Set ATLAS_RETRIEVAL_ENABLED=true in ai-orchestrator to activate.
+  mongodb-atlas-local:
+    image: mongodb/mongodb-atlas-local
+    ports:
+      - "27018:27017"
+    volumes:
+      - atlas-data:/data/db
+
   api-gateway:
     build:
       context: ../../services/api-gateway
@@ -79,11 +90,14 @@ services:
     ports:
       - "8082:8082"
     environment:
+      MONGO_URL: mongodb://app:app_dev_password@mongodb:27017
+      MONGO_DB: grants_portal_modern
       GRANT_APPLICATION_SERVICE_URL: http://grant-application-service:8081
       # ⚠ DELIBERATE: peer-review-service calls grant-application-service directly,
       #   not through the gateway — tighter coupling than necessary, and the
       #   call has no circuit breaker (Item 3).
     depends_on:
+      - mongodb
       - grant-application-service
     # ⚠ no healthcheck
 
@@ -93,10 +107,19 @@ services:
     image: grants-portal-modern/ai-orchestrator:latest   # ⚠ Item 11
     ports:
       - "8000:8000"
+    env_file:
+      - path: ../../.env
+        required: false
     environment:
       AWS_REGION: us-east-1
-      BEDROCK_MODEL_ID: anthropic.claude-3-7-sonnet-20250219-v1:0
+      BEDROCK_MODEL_ID: us.anthropic.claude-haiku-4-5-20251001-v1:0
       MONGO_URL: mongodb://app:app_dev_password@mongodb:27017
+      ATLAS_URI: mongodb://mongodb-atlas-local:27017
+      ATLAS_DB_NAME: grantsportal_retrieval
+      ATLAS_RETRIEVAL_ENABLED: "true"
+    depends_on:
+      - mongodb
+      - mongodb-atlas-local
     # ⚠ DELIBERATE: no AWS creds wired — relies on shared dev IAM role being
     #   mounted via ~/.aws/credentials. The Bedrock stub returns mock data
     #   so it works without real creds. First-day learners discover this and
@@ -115,3 +138,4 @@ services:
 
 volumes:
   mongo-data:
+  atlas-data:

@@ -16,6 +16,7 @@ import java.util.List;
  * ⚠ Item 2 — search results show race-related gaps.
  * ⚠ Item 6 — correlationId search yields half-empty results.
  */
+@CrossOrigin
 @RestController
 @RequestMapping("/api/audit-events")
 public class AuditController {

@@ -15,6 +15,7 @@ import java.util.List;
  *
  * ⚠ Item 10 — /api/vendors (listAll) leaks across agencies.
  */
+@CrossOrigin
 @RestController
 @RequestMapping("/api/vendors")
 public class VendorController {

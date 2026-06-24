@@ -30,3 +30,4 @@ jobs:
             exit 1
           fi
           echo "Summary present ✔"
+# trigger: refresh required check

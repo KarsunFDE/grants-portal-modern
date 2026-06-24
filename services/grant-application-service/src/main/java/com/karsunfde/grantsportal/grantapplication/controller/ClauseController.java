@@ -12,6 +12,7 @@ import java.util.List;
  * Clause-library endpoints. Surface for W2 RAG corpus introspection +
  * lexical fallback path.
  */
+@CrossOrigin
 @RestController
 @RequestMapping("/api/clauses")
 public class ClauseController {

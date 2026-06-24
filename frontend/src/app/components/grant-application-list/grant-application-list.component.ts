@@ -25,7 +25,7 @@ import { GrantApplication } from '../../models/grant-application';
   template: `
     <h2>GrantApplications</h2>
     <p>
-      <a routerLink="/grant-applications/new"><button>+ New grant application</button></a>
+      <button [routerLink]="['/grant-applications/new']">+ New grant application</button>
     </p>
     <div *ngIf="loading">Loading…</div>
     <div *ngIf="error" style="color: crimson">{{ error }}</div>
