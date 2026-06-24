@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Header, HTTPException, Query
 
 from app.schemas.hitl import GateDecisionRecord, GateDecisionRequest, GateId
 from app.services.audit_trail import audit_trail_service
@@ -29,9 +29,16 @@ def record_gate_decision(request: GateDecisionRequest) -> GateDecisionRecord:
 
 
 @router.get("/decision/{gate_decision_id}")
-def get_gate_decision(gate_decision_id: str) -> dict:
-    """Fetch a single gate decision record from the audit trail."""
-    record = audit_trail_service.get_gate_decision(gate_decision_id)
+def get_gate_decision(
+    gate_decision_id: str,
+    x_tenant_id: Optional[str] = Header(default=None, alias="X-Tenant-Id"),
+) -> dict:
+    """Fetch a single gate decision record from the audit trail.
+    X-Tenant-Id header required — decision records are tenant-scoped.
+    """
+    if not x_tenant_id:
+        raise HTTPException(status_code=403, detail="X-Tenant-Id header required")
+    record = audit_trail_service.get_gate_decision(gate_decision_id, x_tenant_id)
     if record is None:
         raise HTTPException(status_code=404, detail="Gate decision not found")
     return record

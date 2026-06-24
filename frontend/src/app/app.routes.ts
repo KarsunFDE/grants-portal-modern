@@ -52,7 +52,7 @@ export const routes: Routes = [
   {
     path: 'grant-applications/new',
     component: GrantApplicationWizardComponent,
-    canMatch: [roleGuard('contracting_officer', 'contract_specialist')],
+    canMatch: [roleGuard('contracting_officer', 'contract_specialist', 'program_manager', 'sys_admin')],
   },
   // Legacy single-page create form kept available under a sub-route so the
   // brownfield baseline is still demoable.

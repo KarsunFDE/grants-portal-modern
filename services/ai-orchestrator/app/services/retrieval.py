@@ -1,8 +1,8 @@
 """
 Retrieval service — hitl-plan.txt §Retrieval Planning / §Retrieval Invalidation Policy.
 
-Hybrid retrieval: MongoDB clause_library text search + static regulatory corpus.
-Atlas Vector Search wires in during W2 (replaces static fallback).
+Hybrid retrieval: Atlas Vector Search (Layer 1) → MongoDB text search (Layer 2)
+→ static regulatory corpus (Layer 3 fallback — keeps demo grounded before corpus ingestion).
 
 Invalidation: per hitl-plan.txt, re-retrieval is required when application data,
 NOFO/amendment, policy corpus version, reviewer assignments/COI state, or award
@@ -27,12 +27,21 @@ from app.schemas.hitl import (
 
 log = logging.getLogger("ai-orchestrator.retrieval")
 
+try:
+    from langsmith import traceable as _traceable
+except ImportError:  # pragma: no cover
+    def _traceable(**_kw):
+        def _d(fn): return fn
+        return _d
+
 CACHE_TTL_HOURS = 24
 
 
 # ---------------------------------------------------------------------------
-# Static regulatory corpus — 2 CFR 200, 45 CFR 75, key provisions
-# Atlas Vector Search replaces this in W2.
+# Static regulatory corpus — Layer 3 fallback.
+# Used when Atlas vector search and MongoDB text search both return nothing
+# (e.g., before ingest_corpus.py has been run or Titan embeddings unavailable).
+# Keywords are lowercase for case-insensitive matching against the query.
 # ---------------------------------------------------------------------------
 _STATIC_CORPUS = [
     {
@@ -42,7 +51,8 @@ _STATIC_CORPUS = [
         "last_revised": "2024-04-22",
         "text_excerpt": "Federal agencies must have a merit review process for competitive grants (2 CFR 200.205).",
         "regulation": "2 CFR 200",
-        "keywords": ["merit review", "merit", "competitive", "review process", "proposal"],
+        "keywords": ["merit review", "merit", "competitive", "review process", "proposal",
+                     "evaluation", "scoring", "criterion"],
     },
     {
         "chunk_id": "2cfr200-206-001",
@@ -60,7 +70,7 @@ _STATIC_CORPUS = [
         "last_revised": "2023-10-01",
         "text_excerpt": "HHS supplement — risk evaluation for HHS grant applicants (45 CFR 75.206).",
         "regulation": "45 CFR 75",
-        "keywords": ["HHS", "risk", "health human services", "hhs supplement"],
+        "keywords": ["hhs", "risk", "health human services", "hhs supplement"],
     },
     {
         "chunk_id": "2cfr200-coi-001",
@@ -78,7 +88,8 @@ _STATIC_CORPUS = [
         "last_revised": "2024-04-22",
         "text_excerpt": "Award decisions must be documented with a written record of rationale (2 CFR 200.212).",
         "regulation": "2 CFR 200",
-        "keywords": ["award", "award decision", "decision", "rationale", "documentation"],
+        "keywords": ["award", "award decision", "decision", "rationale", "documentation",
+                     "recommendation", "funding recommendation", "funding"],
     },
     {
         "chunk_id": "2cfr200-factor-001",
@@ -87,7 +98,8 @@ _STATIC_CORPUS = [
         "last_revised": "2024-04-22",
         "text_excerpt": "NOFO must describe selection criteria and evaluation factors (2 CFR 200.204).",
         "regulation": "2 CFR 200",
-        "keywords": ["factor", "evaluation factor", "selection criteria", "nofo", "narrative"],
+        "keywords": ["factor", "evaluation factor", "selection criteria", "nofo", "narrative",
+                     "criterion", "criteria", "merit criterion"],
     },
     {
         "chunk_id": "nofo-general-001",
@@ -96,17 +108,67 @@ _STATIC_CORPUS = [
         "last_revised": "2024-01-01",
         "text_excerpt": "Notice of Funding Opportunity — describes eligibility, evaluation, and award criteria.",
         "regulation": "NOFO",
-        "keywords": ["nofo", "funding opportunity", "notice", "eligibility", "criteria"],
+        "keywords": ["nofo", "funding opportunity", "notice", "eligibility", "criteria",
+                     "criterion", "factors", "funding", "recommendation"],
+    },
+    {
+        "chunk_id": "45cfr75-merit-001",
+        "source_id": "45-CFR-75.205",
+        "section": "75.205",
+        "last_revised": "2023-10-01",
+        "text_excerpt": "HHS agencies must apply merit review evaluation criteria for competitive grant awards (45 CFR 75.205).",
+        "regulation": "45 CFR 75",
+        "keywords": ["merit", "evaluation", "criterion", "criteria", "merit review",
+                     "evaluation criteria", "scoring", "factor"],
+    },
+    {
+        "chunk_id": "45cfr75-award-001",
+        "source_id": "45-CFR-75.210",
+        "section": "75.210",
+        "last_revised": "2023-10-01",
+        "text_excerpt": "HHS post-award requirements: award decisions must document funding recommendations and rationale (45 CFR 75.210).",
+        "regulation": "45 CFR 75",
+        "keywords": ["award", "award decision", "funding", "recommendation",
+                     "funding recommendation", "post-award", "decision"],
     },
 ]
 
 
+def _filter_superseded_amendments(citations: List[Citation]) -> List[Citation]:
+    """
+    ADR 0009 §11: when the same source_id has chunks at multiple last_revised dates,
+    keep ALL chunks whose revision matches the latest date for that source_id.
+    """
+    latest_date: dict = {}
+    for c in citations:
+        if not c.source_id or not c.last_revised:
+            continue
+        existing = latest_date.get(c.source_id)
+        if existing is None or c.last_revised > existing:
+            latest_date[c.source_id] = c.last_revised
+
+    result: List[Citation] = []
+    for c in citations:
+        if not c.source_id:
+            result.append(c)
+            continue
+        best_date = latest_date.get(c.source_id)
+        if best_date is None:
+            result.append(c)
+        elif c.last_revised is None or c.last_revised == best_date:
+            result.append(c)
+    return result
+
+
 def _make_cache_key(query: str, tenant_id: str, corpus_version: str) -> str:
-    raw = f"{query}|{tenant_id}|{corpus_version}"
+    # ADR 0009 §7: normalize before hashing so "Merit Review" and "merit review" collide.
+    normalized = query.lower().strip()
+    raw = f"{normalized}|{tenant_id}|{corpus_version}"
     return hashlib.sha256(raw.encode()).hexdigest()
 
 
 class RetrievalService:
+    @_traceable(name="retrieval_service.retrieve", run_type="retriever", tags=["rag", "2cfr200"])
     def retrieve(
         self,
         query: str,
@@ -119,12 +181,11 @@ class RetrievalService:
         award_package_hash: Optional[str] = None,
         corpus_version: str = "v1",
         skip_cache: bool = False,
-    ) -> Tuple[List[Citation], float, float, datetime]:
+    ) -> Tuple[List[Citation], float, float, datetime, str, bool]:
         """
         Retrieve citations for a query.
-        Returns (citations, confidence, faithfulness, retrieved_at).
-        retrieved_at is the cache entry's created_at (for hits) or now (for fresh retrieval).
-        Callers must pass retrieved_at to validate_before_generation before invoking a model.
+        Returns (citations, confidence, faithfulness, retrieved_at, retrieval_strategy, is_cache_hit).
+        retrieval_strategy: "atlas" | "mongodb_text" | "static" | "cache"
         """
         db = self._safe_get_db()
         cache_key = _make_cache_key(query, tenant_id, corpus_version)
@@ -136,9 +197,11 @@ class RetrievalService:
                 policy_corpus_hash, coi_state_hash, award_package_hash,
             )
             if cached is not None:
-                return cached  # 4-tuple: (citations, confidence, faithfulness, created_at)
+                citations, confidence, faithfulness, created_at, original_strategy = cached
+                return citations, confidence, faithfulness, created_at, original_strategy, True
 
-        citations = self._retrieve_from_corpus(db, query, tenant_id)
+        citations, retrieval_strategy = self._retrieve_from_corpus(db, query, tenant_id)
+        citations = _filter_superseded_amendments(citations)
         confidence = self._compute_confidence(citations, query)
         faithfulness = self._compute_faithfulness(citations)
         retrieved_at = datetime.utcnow()
@@ -148,9 +211,10 @@ class RetrievalService:
                 db, cache_key, tenant_id, query, citations, confidence, faithfulness,
                 corpus_version, application_data_hash, nofo_hash, reviewer_state_hash,
                 policy_corpus_hash, coi_state_hash, award_package_hash,
+                retrieval_strategy=retrieval_strategy,
             )
 
-        return citations, confidence, faithfulness, retrieved_at
+        return citations, confidence, faithfulness, retrieved_at, retrieval_strategy, False
 
     def invalidate(
         self,
@@ -158,10 +222,6 @@ class RetrievalService:
         trigger: InvalidationTrigger,
         resource_id: str,
     ) -> int:
-        """
-        Invalidate all cache entries for a tenant after a trigger event.
-        Creates a retrieval invalidation event record (no silent drops).
-        """
         db = self._safe_get_db()
         count = 0
         if db is not None:
@@ -177,10 +237,6 @@ class RetrievalService:
             except Exception as exc:
                 log.warning("retrieval invalidation db error: %s", exc)
         return count
-
-    # ------------------------------------------------------------------
-    # Internal helpers
-    # ------------------------------------------------------------------
 
     def _safe_get_db(self):
         try:
@@ -199,7 +255,7 @@ class RetrievalService:
         policy_corpus_hash: Optional[str] = None,
         coi_state_hash: Optional[str] = None,
         award_package_hash: Optional[str] = None,
-    ) -> Optional[Tuple[List[Citation], float, float]]:
+    ) -> Optional[Tuple[List[Citation], float, float, datetime, str]]:
         try:
             entry = db.retrieval_cache.find_one({"cache_key": cache_key, "tenant_id": tenant_id})
         except Exception:
@@ -207,13 +263,11 @@ class RetrievalService:
         if entry is None:
             return None
 
-        # Freshness check
         expires_at = entry.get("expires_at")
         if expires_at and datetime.utcnow() > expires_at:
             db.retrieval_cache.delete_one({"cache_key": cache_key})
             return None
 
-        # Hash checks — all 6 invalidation triggers (hitl-plan.txt §Retrieval Invalidation Policy)
         for field, value in [
             ("application_data_hash", application_data_hash),
             ("nofo_hash", nofo_hash),
@@ -234,29 +288,39 @@ class RetrievalService:
             created_at = datetime.fromisoformat(raw_ts)
         else:
             created_at = datetime.utcnow()
-        return citations, entry["confidence_score"], entry["faithfulness_score"], created_at
+        original_strategy = entry.get("retrieval_strategy", "static")
+        return citations, entry["confidence_score"], entry["faithfulness_score"], created_at, original_strategy
 
-    def _retrieve_from_corpus(self, db, query: str, tenant_id: str) -> List[Citation]:
-        # Atlas Vector Search path — ADR 0006/0007 Phase B.
-        # Activated by ATLAS_RETRIEVAL_ENABLED=true; Atlas is authoritative when live.
+    def _retrieve_from_corpus(self, db, query: str, tenant_id: str) -> Tuple[List[Citation], str]:
+        """
+        Returns (citations, retrieval_strategy).
+        Layer 1: Atlas Vector Search.
+        Layer 2: MongoDB clause_library text search.
+        Layer 3: Static regulatory corpus (keyword match — fallback before corpus ingestion).
+        """
+        # Layer 1: Atlas Vector Search
         if atlas_search.ATLAS_RETRIEVAL_ENABLED:
             results = atlas_search.vector_search(query, tenant_id)
             if results:
-                return results
-            # vector_search returns [] on error — fall through to static corpus so
-            # grounding checks surface low-confidence rather than silently failing.
-            log.warning("Atlas vector_search returned no results — falling back to static corpus")
+                log.info("retrieval_strategy=atlas citations=%d query=%r", len(results), query[:60])
+                return results, "atlas"
+            log.warning("Atlas vector_search returned no results — falling to Layer 2")
 
         citations: List[Citation] = []
 
-        # MongoDB clause_library text search (FAR/DFARS corpus)
+        # Layer 2: MongoDB clause_library text search
         if db is not None:
             try:
+                # Filter by tenant + global sentinel so Layer-2 never surfaces
+                # cross-tenant source material as in-tenant grounding evidence.
                 results = list(
                     db.clause_library.find(
-                        {"$text": {"$search": query}},
+                        {
+                            "$text": {"$search": query},
+                            "tenant_id": {"$in": [tenant_id, "__global__"]},
+                        },
                         {"score": {"$meta": "textScore"}, "clauseId": 1, "farPart": 1,
-                         "title": 1, "body": 1, "lastRevised": 1},
+                         "title": 1, "body": 1, "lastRevised": 1, "tenant_id": 1},
                         limit=3,
                     ).sort([("score", {"$meta": "textScore"})])
                 )
@@ -269,26 +333,30 @@ class RetrievalService:
                         section=far_part,
                         last_revised=doc.get("lastRevised"),
                         text_excerpt=(doc.get("body") or "")[:200] or None,
-                        tenant_id=tenant_id,
+                        # Preserve the document's real tenant_id rather than overwriting
+                        # with the caller's tenant — prevents false provenance attribution.
+                        tenant_id=doc.get("tenant_id") or tenant_id,
                         regulation="DFARS" if "DFARS" in far_part.upper() else "FAR",
                     ))
             except Exception:
-                pass  # text index may not exist yet; fall through to static corpus
+                pass
 
-        # Static regulatory corpus — keyword match.
-        # Diagnostic use only once Atlas is live (ADR 0006 §1).
-        citations.extend(self._query_static_corpus(query, tenant_id))
+        if citations:
+            seen: set = set()
+            unique: List[Citation] = []
+            for c in citations:
+                if c.source_id not in seen:
+                    seen.add(c.source_id)
+                    unique.append(c)
+                if len(unique) >= 5:
+                    break
+            log.info("retrieval_strategy=mongodb_text citations=%d", len(unique))
+            return unique, "mongodb_text"
 
-        # Deduplicate by source_id, cap at 5
-        seen: set = set()
-        unique: List[Citation] = []
-        for c in citations:
-            if c.source_id not in seen:
-                seen.add(c.source_id)
-                unique.append(c)
-            if len(unique) >= 5:
-                break
-        return unique
+        # Layer 3: Static regulatory corpus — keyword match
+        static_hits = self._query_static_corpus(query, tenant_id)
+        log.info("retrieval_strategy=static citations=%d query=%r", len(static_hits), query[:60])
+        return static_hits, "static"
 
     def _query_static_corpus(self, query: str, tenant_id: str) -> List[Citation]:
         q = query.lower()
@@ -310,7 +378,6 @@ class RetrievalService:
         if not citations:
             return 0.0
         base = min(len(citations) * 0.15, 0.70)
-        # Boost for regulatory anchor sources
         has_reg = any(c.regulation in ("2 CFR 200", "45 CFR 75") for c in citations)
         has_nofo = any(c.regulation == "NOFO" for c in citations)
         if has_reg:
@@ -340,6 +407,7 @@ class RetrievalService:
         policy_corpus_hash: Optional[str] = None,
         coi_state_hash: Optional[str] = None,
         award_package_hash: Optional[str] = None,
+        retrieval_strategy: Optional[str] = None,
     ) -> None:
         try:
             now = datetime.utcnow()
@@ -356,6 +424,7 @@ class RetrievalService:
                         GroundingStatus.GROUNDED.value if citations else GroundingStatus.UNGROUNDED.value
                     ),
                     "corpus_version": corpus_version,
+                    "retrieval_strategy": retrieval_strategy,
                     "application_data_hash": application_data_hash,
                     "nofo_hash": nofo_hash,
                     "reviewer_state_hash": reviewer_state_hash,

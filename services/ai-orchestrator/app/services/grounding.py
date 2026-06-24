@@ -11,6 +11,13 @@ from __future__ import annotations
 
 from typing import Dict, List, Set, Tuple
 
+try:
+    from langsmith import traceable as _traceable
+except ImportError:  # pragma: no cover
+    def _traceable(**_kw):
+        def _d(fn): return fn
+        return _d
+
 from app.schemas.hitl import (
     Citation,
     GateId,
@@ -50,6 +57,7 @@ GATE_FAITHFULNESS_THRESHOLDS: Dict[GateId, float] = {
 _ADVANCING_STATUSES = {GroundingStatus.GROUNDED, GroundingStatus.LOW_CONFIDENCE}
 
 
+@_traceable(name="compute_grounding_status", run_type="chain", tags=["grounding", "regulatory"])
 def compute_grounding_status(
     citations: List[Citation],
     confidence_score: float,

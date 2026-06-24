@@ -41,10 +41,18 @@ class TestComputeGroundingStatus:
         assert reasons == []
 
     def test_low_confidence_low_confidence_status(self):
+        # 0.70 is in LOW_CONFIDENCE band: >= CONFIDENCE_BLOCK (0.65) but < CONFIDENCE_PROCEED (0.80)
         citations = [Citation(chunk_id="c1", source_id="src", regulation="2 CFR 200", tenant_id="t1")]
-        status, reasons = compute_grounding_status(citations, 0.50, 0.90)
+        status, reasons = compute_grounding_status(citations, 0.70, 0.90)
         assert status == GroundingStatus.LOW_CONFIDENCE
         assert HumanReviewReason.LOW_CONFIDENCE in reasons
+
+    def test_below_block_threshold_is_ungrounded(self):
+        # 0.50 < CONFIDENCE_BLOCK (0.65) → UNGROUNDED, not LOW_CONFIDENCE
+        citations = [Citation(chunk_id="c1", source_id="src", regulation="2 CFR 200", tenant_id="t1")]
+        status, reasons = compute_grounding_status(citations, 0.50, 0.90)
+        assert status == GroundingStatus.UNGROUNDED
+        assert HumanReviewReason.UNGROUNDED in reasons
 
     def test_low_faithfulness_adds_reason(self):
         citations = [Citation(chunk_id="c1", source_id="src", regulation="2 CFR 200", tenant_id="t1")]

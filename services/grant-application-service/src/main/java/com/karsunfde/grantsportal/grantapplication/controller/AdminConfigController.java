@@ -15,6 +15,7 @@ import java.util.Map;
  * "atlas" as available vector stores, even though only Atlas is actually
  * wired into ai-orchestrator. Cohort grep finds the lie.
  */
+@CrossOrigin
 @RestController
 @RequestMapping("/api/admin/config")
 public class AdminConfigController {

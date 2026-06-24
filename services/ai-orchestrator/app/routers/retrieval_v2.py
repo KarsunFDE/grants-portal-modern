@@ -61,7 +61,7 @@ def grounded_search(request: RetrievalRequest) -> GroundedResponse:
     If output is ungrounded/low-confidence: blocks and escalates to named gate owner.
     Escalation created regardless of whether gate_context is set — no silent retries.
     """
-    citations, confidence, faithfulness, retrieved_at = retrieval_service.retrieve(
+    citations, confidence, faithfulness, retrieved_at, _strategy, _cache_hit = retrieval_service.retrieve(
         query=request.query,
         tenant_id=request.tenant_id,
         application_data_hash=request.application_data_hash,

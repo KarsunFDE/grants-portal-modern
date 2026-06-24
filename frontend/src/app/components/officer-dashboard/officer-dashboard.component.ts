@@ -24,8 +24,8 @@ import { NotificationService } from '../../services/notification.service';
         <h2>{{ greeting() }}</h2>
         <div class="subtitle">{{ role.current.displayName }} · {{ role.current.authorityNote }}</div>
       </div>
-      <div>
-        <a routerLink="/grant-applications/new"><button>+ New grant application</button></a>
+      <div *ngIf="canCreateApplication()">
+        <button [routerLink]="['/grant-applications/new']">+ New grant application</button>
       </div>
     </div>
 
@@ -104,6 +104,10 @@ export class OfficerDashboardComponent {
     const hour = new Date().getHours();
     const time = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
     return `${time}, ${this.role.current.displayName.split(' ')[0]}`;
+  }
+
+  canCreateApplication(): boolean {
+    return this.role.hasAny('contracting_officer', 'contract_specialist', 'program_manager', 'sys_admin');
   }
 
   openGrantApplications(): number {

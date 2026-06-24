@@ -17,6 +17,7 @@ import java.util.Map;
  * doesn't directly land here, but Item 1's downstream-trust convention
  * still bleeds into ops trust assumptions (W4 Wed OWASP LLM07/08 lesson).
  */
+@CrossOrigin
 @RestController
 @RequestMapping("/api/admin/users")
 public class AdminUserController {

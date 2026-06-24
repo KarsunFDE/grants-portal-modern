@@ -65,6 +65,74 @@ graph.invoke(gate_decision_input, config=config)
 # No regeneration if checkpoint exists at this thread_id + gate state
 ```
 
+**Sample — LangGraph eligibility node with Gate 1 interrupt:**
+```python
+from langgraph.graph import StateGraph, END
+from langgraph.checkpoint.mongodb import MongoDBSaver
+from langgraph.types import interrupt
+
+def eligibility_node(state: WorkflowState) -> WorkflowState:
+    query = f"eligibility risk review applicant_type={state.get('applicant_type', '')}"
+    citations, conf, faith, retrieved_at = retrieval_service.retrieve(
+        query=query, tenant_id=state["tenant_id"]
+    )
+    grounding_status, reasons = compute_grounding_status(
+        citations, conf, faith, gate_id=GateId.GATE_1
+    )
+    cache_ok, cache_reasons = validate_before_generation(
+        citations=citations, confidence_score=conf, faithfulness_score=faith,
+        cache_created_at=retrieved_at, tenant_id=state["tenant_id"],
+    )
+    if not cache_ok and is_grounded(grounding_status):
+        grounding_status = GroundingStatus.UNGROUNDED
+        reasons += cache_reasons
+
+    if not should_advance(grounding_status):
+        gate_enforcer.create_escalation(
+            gate_id=GateId.GATE_1, tenant_id=state["tenant_id"],
+            ai_run_id=state["ai_run_ids"].get("SCREENING", ""),
+            human_review_reasons=reasons, grounding_status=grounding_status,
+            confidence_score=conf,
+        )
+        return {**state, "active_gate_id": GateId.GATE_1,
+                "gate_states": {**state["gate_states"], "GATE_1": "PENDING"}}
+
+    bedrock_result = invoke_model(
+        f"Screen for eligibility: {state.get('raw_text', '')}",
+        system="You screen federal grant applications under 2 CFR 200.205-206.",
+    )
+    # Pause workflow — gate owner must submit GateDecisionRequest to resume
+    gate_decision = interrupt({"gate_id": "GATE_1", "ai_output": bedrock_result["body"]})
+    return {**state, "gate_states": {**state["gate_states"], "GATE_1": gate_decision}}
+
+def route_gate_1(state: WorkflowState) -> str:
+    decision = state["gate_states"].get("GATE_1")
+    if decision == "APPROVE":
+        return "reviewer_assignment"
+    if decision == "RETURN_FOR_FIXES":
+        loop_key = f"GATE_1:{state.get('actor_id', 'default')}"
+        if state["revision_loop_counts"].get(loop_key, 0) >= 3:
+            return "escalate_supervisor"
+        return "eligibility_node"
+    return END  # REJECT → terminate
+
+builder = StateGraph(WorkflowState)
+builder.add_node("eligibility_node", eligibility_node)
+builder.add_node("reviewer_assignment", reviewer_assignment_node)
+builder.set_entry_point("eligibility_node")
+builder.add_conditional_edges("eligibility_node", route_gate_1)
+
+checkpointer = MongoDBSaver(db["workflow_checkpoints"])
+graph = builder.compile(checkpointer=checkpointer)
+
+# Start
+config = {"configurable": {"thread_id": workflow_run_id}}
+graph.invoke(initial_state, config=config)
+
+# Resume after gate owner submits decision
+graph.invoke({"gate_decision": "APPROVE"}, config=config)
+```
+
 ---
 
 ## 3. Programmatic Control Sequence (per AI call)
@@ -82,6 +150,57 @@ Order is strict; steps 1 and 2 run in parallel, all others sequential:
 7. Bedrock invocation with system-turn fence
 8. `GateDecisionRecord` appended on gate resolution
 9. SLA timer started on gate assignment; auto-escalation on breach
+
+**Sample — two-phase parallel execution:**
+```python
+import asyncio
+
+async def guarded_generate(
+    query: str,
+    raw_text: str,
+    tenant_id: str,
+    gate_id: GateId,
+    idempotency_key: str,
+) -> dict:
+    # Phase 1: injection defense + retrieval run concurrently
+    defense_task = asyncio.create_task(
+        injection_defense.scan(raw_text)  # HTML strip, blocklist, fence check
+    )
+    retrieval_task = asyncio.create_task(
+        retrieval_service.retrieve_async(query=query, tenant_id=tenant_id)
+    )
+    _, (citations, conf, faith, retrieved_at) = await asyncio.gather(
+        defense_task, retrieval_task
+    )
+
+    # Phase 2: validate AFTER retrieval (requires citations + scores)
+    cache_ok, cache_reasons = validate_before_generation(
+        citations=citations, confidence_score=conf, faithfulness_score=faith,
+        cache_created_at=retrieved_at, tenant_id=tenant_id,
+    )
+
+    grounding_status, reasons = compute_grounding_status(
+        citations, conf, faith, gate_id=gate_id
+    )
+    if not cache_ok and is_grounded(grounding_status):
+        grounding_status = GroundingStatus.UNGROUNDED
+        reasons += cache_reasons
+
+    if not should_advance(grounding_status):
+        return {"blocked": True, "grounding_status": grounding_status, "reasons": reasons}
+
+    # Idempotency check — skip Bedrock if already complete for this key
+    cached = idempotency_store.get(idempotency_key)
+    if cached:
+        return cached
+
+    result = invoke_model(
+        f"Context: {raw_text}",
+        system=SYSTEM_FENCE + "\nYou assist with federal grants under 2 CFR 200.",
+    )
+    idempotency_store.set(idempotency_key, result)
+    return result
+```
 
 ---
 
@@ -102,6 +221,44 @@ idempotency_key = sha256(
 - `stage` — `WorkflowStage` value at invocation time
 - `attempt` — integer; increments on retry; resets on new gate cycle
 - `ai_run_id` — UUID v4, display/audit field only (not the dedup key)
+
+**Sample — key construction and store:**
+```python
+import hashlib
+
+def build_idempotency_key(
+    workflow_run_id: str,
+    stage: WorkflowStage,
+    gate_id: Optional[GateId],
+    attempt: int,
+    prompt_template_version: str,
+    corpus_version: str,
+    raw_text: str,
+    query: str,
+    tenant_id: str,
+) -> str:
+    input_hash = hashlib.sha256(
+        f"{raw_text}|{query}|{tenant_id}".encode()
+    ).hexdigest()
+    key_src = (
+        f"{workflow_run_id}|{stage.value}|{gate_id.value if gate_id else ''}|"
+        f"{attempt}|{prompt_template_version}|{corpus_version}|{input_hash}"
+    )
+    return hashlib.sha256(key_src.encode()).hexdigest()
+
+# Usage in gate node
+key = build_idempotency_key(
+    workflow_run_id=state["workflow_run_id"],
+    stage=WorkflowStage.SCREENING,
+    gate_id=GateId.GATE_1,
+    attempt=state["revision_loop_counts"].get("GATE_1:default", 0),
+    prompt_template_version="v2",
+    corpus_version=state["corpus_version"],
+    raw_text=state.get("raw_text", ""),
+    query=query,
+    tenant_id=state["tenant_id"],
+)
+```
 
 ---
 

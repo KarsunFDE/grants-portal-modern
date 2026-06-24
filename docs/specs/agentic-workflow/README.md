@@ -34,12 +34,13 @@ The visualization diagram is useful for presentations but is not authoritative w
 
 ## Open Questions
 
-- [ ] `REVISION_LOOP_EXCEEDED` enum value not yet added to `HumanReviewReason` in `hitl.py:67`
-- [ ] `/answer-qa` prompt injection gap (Item 9 in `main.py`) not yet fixed
-- [ ] `idempotency_store` not yet implemented in code
-- [ ] Tenant auth-principal derivation not yet wired (body-supplied `tenant_id` still trusted)
+- [x] ~~`REVISION_LOOP_EXCEEDED` enum value not yet added to `HumanReviewReason`~~ — added at `hitl.py:83`
+- [ ] `/answer-qa` has no retrieval or grounding at all (`main.py:332`) — spec §6.2 requires both; Item 9 injection gap is the secondary issue
+- [ ] `/draft-amendment` has no retrieval, grounding, or gate (`main.py:308`) — spec §6.1 requires all three
+- [ ] `idempotency_store` not yet implemented in code (`main.py:234,412,497` mints fresh UUID per call)
+- [ ] Tenant auth-principal derivation not yet wired (body-supplied `tenant_id` still trusted in `EligibilityCheckRequest`, `FactorSuggestRequest`, `SSDDDraftRequest`)
 - [ ] LangGraph dependency not yet pinned in `requirements.txt`
-- [ ] Multi-agent COI panel not yet implemented
+- [ ] Multi-agent COI panel not yet implemented (`/agent/intake-triage` is a single sequential node)
 - [ ] Prior-award PI graph data store not yet provisioned
 
 ---

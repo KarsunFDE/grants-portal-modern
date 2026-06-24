@@ -90,11 +90,14 @@ services:
     ports:
       - "8082:8082"
     environment:
+      MONGO_URL: mongodb://app:app_dev_password@mongodb:27017
+      MONGO_DB: grants_portal_modern
       GRANT_APPLICATION_SERVICE_URL: http://grant-application-service:8081
       # ⚠ DELIBERATE: peer-review-service calls grant-application-service directly,
       #   not through the gateway — tighter coupling than necessary, and the
       #   call has no circuit breaker (Item 3).
     depends_on:
+      - mongodb
       - grant-application-service
     # ⚠ no healthcheck
 
@@ -104,13 +107,16 @@ services:
     image: grants-portal-modern/ai-orchestrator:latest   # ⚠ Item 11
     ports:
       - "8000:8000"
+    env_file:
+      - path: ../../.env
+        required: false
     environment:
       AWS_REGION: us-east-1
-      BEDROCK_MODEL_ID: anthropic.claude-3-7-sonnet-20250219-v1:0
+      BEDROCK_MODEL_ID: us.anthropic.claude-haiku-4-5-20251001-v1:0
       MONGO_URL: mongodb://app:app_dev_password@mongodb:27017
       ATLAS_URI: mongodb://mongodb-atlas-local:27017
       ATLAS_DB_NAME: grantsportal_retrieval
-      ATLAS_RETRIEVAL_ENABLED: "false"   # Phase B: flip to "true" after ingest_corpus.py runs
+      ATLAS_RETRIEVAL_ENABLED: "true"
     depends_on:
       - mongodb
       - mongodb-atlas-local
